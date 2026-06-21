@@ -1,0 +1,3 @@
+-- Seed data is loaded through POST /api/fundamentals/seed so the app can reuse
+-- its TypeScript mock dataset and upsert logic. Keep this file present because
+-- the Supabase CLI config references it during `supabase db reset`.
