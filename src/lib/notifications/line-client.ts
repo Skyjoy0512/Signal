@@ -1,5 +1,3 @@
-import type { NotificationPriority, LineAlertInput } from "./types";
-
 /**
  * LINE Messaging API client for Signal.
  *

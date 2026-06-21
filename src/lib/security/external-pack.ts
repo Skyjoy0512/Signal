@@ -75,7 +75,7 @@ export function generateExternalPack(
 
   // Symbol info (anonymized)
   if (opts.anonymize) {
-    lines.push(`- 銘柄: [Anonymized — ${symbol.sector ?? "Unknown Sector"}]`);
+    lines.push(`- 銘柄: [Anonymized - ${symbol.sector ?? "Unknown Sector"}]`);
     lines.push(`- セクター: ${symbol.sector ?? "N/A"}`);
     lines.push(`- 業種: ${symbol.industry ?? "N/A"}`);
   } else {

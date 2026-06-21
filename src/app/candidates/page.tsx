@@ -117,35 +117,52 @@ export default function CandidatesPage() {
       </div>
 
       {loading && (
-        <div className="card card-dashed" style={{ textAlign: "center", padding: "36px 24px" }}>
-          <p style={{ fontSize: 13, color: "var(--color-muted-clay)" }}>シグナルを計算中...</p>
+        <div className="card state-panel">
+          <div className="state-panel-head">
+            <div>
+              <div className="stat-label">Loading</div>
+              <div className="state-panel-title">シグナルを計算中</div>
+              <p className="state-panel-copy">市場、業界、テーマ、銘柄の順に読み込みます。</p>
+            </div>
+            <span className="badge badge-outline">計算中</span>
+          </div>
+          <div className="skeleton-grid">
+            {[0, 1, 2].map((item) => (
+              <div key={item} className="skeleton-card">
+                <div className="skeleton-line short" />
+                <div className="skeleton-line long" />
+                <div className="skeleton-line medium" />
+              </div>
+            ))}
+          </div>
         </div>
       )}
 
       {error && (
-        <div className="card">
-          <div className="flex items-start gap-3">
-            <span style={{ color: "var(--color-ember-orange)", fontSize: 13 }}>&#9888;</span>
+        <div className="card state-panel">
+          <div className="state-panel-head">
             <div>
-              <div style={{ fontSize: 13, fontWeight: 400, color: "var(--color-ember-orange)", marginBottom: 2 }}>エラー</div>
-              <div style={{ fontSize: 12, color: "var(--color-muted-clay)" }}>{error}</div>
-              <Button onClick={fetchSignals} variant="outline" size="sm" style={{ marginTop: 8 }}>再試行</Button>
+              <div className="stat-label">Error</div>
+              <div className="state-panel-title">候補銘柄を読み込めませんでした</div>
+              <p className="state-panel-copy">{error}</p>
             </div>
+            <Button onClick={fetchSignals} variant="outline" size="sm">再試行</Button>
           </div>
         </div>
       )}
 
       {!loading && !error && signals.length === 0 && (
-        <div className="card card-dashed" style={{ textAlign: "center", padding: "48px 24px" }}>
-          <Image
-            src="https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=400&q=80&fit=crop"
-            alt=""
-            width={200}
-            height={130}
-            style={{ objectFit: "cover", borderRadius: 8, marginBottom: 16, opacity: 0.7 }}
-          />
-          <div style={{ fontSize: 13, fontWeight: 400, marginBottom: 4 }}>シグナルはまだありません</div>
-          <div style={{ fontSize: 12, color: "var(--color-muted-clay)" }}>日次スキャンを実行すると、投資判断シグナルがここに表示されます。</div>
+        <div className="card card-dashed empty-state">
+          <div className="empty-state-media">
+            <Image
+              src="https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=440&q=80&fit=crop"
+              alt=""
+              fill
+              sizes="220px"
+            />
+          </div>
+          <div className="empty-state-title">シグナルはまだありません</div>
+          <div className="empty-state-copy">日次スキャンを実行すると、投資判断シグナルがここに表示されます。</div>
         </div>
       )}
 
@@ -415,7 +432,15 @@ export default function CandidatesPage() {
             </div>
           </section>
 
-          <motion.div className="grid-signals" style={{ marginTop: 4 }} layout>
+          <div className="candidate-list-head">
+            <div>
+              <div className="section-kicker">Candidate Cards</div>
+              <h2>候補カード一覧</h2>
+            </div>
+            <span className="badge badge-outline">{filteredSignals.length}件</span>
+          </div>
+
+          <motion.div className="grid-signals" style={{ marginTop: 10 }} layout>
             {filteredSignals.map((s, i) => <SignalCard key={i} signal={s} />)}
           </motion.div>
         </motion.div>

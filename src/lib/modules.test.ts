@@ -16,6 +16,9 @@ import { evaluateOutcome, detectDueReviews, getReviewDate } from "./outcomes/tra
 import { KillSwitch } from "./security/kill-switch";
 import { generateExternalPack } from "./security/external-pack";
 import { isForbidden, buildForbiddenCheck } from "./security/forbidden-symbols";
+import type { LayerCondition } from "./intelligence/types";
+import type { ScoredSymbol } from "./jobs/types";
+import type { ScoringOutput } from "./scoring/types";
 
 // =========================================
 // Notification Budget
@@ -38,9 +41,9 @@ describe("NotificationBudgetManager", () => {
     const mgr = new NotificationBudgetManager(10, 3600);
     const now = 1000000;
     mgr.recordSent("key1", now);
-    // 30 minutes later — still in cooldown
+    // 30 minutes later - still in cooldown
     expect(mgr.canSend("key1", now + 1800 * 1000).allowed).toBe(false);
-    // 2 hours later — cooldown passed
+    // 2 hours later - cooldown passed
     expect(mgr.canSend("key1", now + 3600 * 1000 + 1).allowed).toBe(true);
   });
 
@@ -258,7 +261,7 @@ describe("external analysis pack", () => {
         return5d: 3.5, return20d: 8.2,
         distanceFrom52wHighPct: -2, drawdownFromRecentHighPct: -1.5,
       },
-      layer: null as any,
+      layer: null as unknown as LayerCondition,
       scores: {
         opportunityScore: 72, entryTimingScore: 65,
         riskScore: 40, convictionScore: 70,
@@ -268,14 +271,16 @@ describe("external analysis pack", () => {
         breakdown: {
           opportunity: { trend: 75, volume: 65, relativeStrength: 60, theme: 60, fundamental: 50, catalyst: 50 },
           entryTiming: { setup: 65, rsiPosition: 60, atrPosition: 55, supportResistance: 60, priceAction: 60 },
-          risk: { volatility: 45, liquidity: 40, event: 50, market: 45, sector: 45, data: 35 },
+          risk: { volatility: 45, liquidity: 40, event: 50, market: 45, sector: 45, data: 35, overheating: 40, trendBreakdown: 30, valuation: 50, breakoutFailure: 40 },
           conviction: { dataConfidence: 85, multiLayerAlignment: 70, technicalConfirmation: 70, fundamentalConfirmation: 50, llmConfidence: 50 },
         },
-      } as any,
+      } as ScoringOutput,
       classification: {
         action: "entry_candidate" as const, tier: "B" as const,
         tierReason: "entry gates passed",
-        gates: {} as any,
+        gates: {},
+        gateDetails: [],
+        reasons: [{ code: "entry_gates_passed", message: "entry gates passed", severity: "info" as const }],
         scenario: {
           entryPrice: 3100, stopPrice: 2950,
           targetConservative: 3150, targetBase: 3300, targetBull: 3500,
@@ -284,7 +289,7 @@ describe("external analysis pack", () => {
           expectedHoldingPeriod: "2W", calculationMethod: "atr_v1",
         },
       },
-    };
+    } as ScoredSymbol;
 
     const pack = generateExternalPack(scored, null, { anonymize: true });
     expect(pack).toContain("Signal One-shot External Analysis Pack");
@@ -310,7 +315,7 @@ describe("external analysis pack", () => {
         return5d: 2.0, return20d: 5.0,
         distanceFrom52wHighPct: -5, drawdownFromRecentHighPct: -3,
       },
-      layer: null as any,
+      layer: null as unknown as LayerCondition,
       scores: {
         opportunityScore: 65, entryTimingScore: 60,
         riskScore: 50, convictionScore: 55,
@@ -320,17 +325,19 @@ describe("external analysis pack", () => {
         breakdown: {
           opportunity: { trend: 60, volume: 50, relativeStrength: 45, theme: 50, fundamental: 50, catalyst: 50 },
           entryTiming: { setup: 55, rsiPosition: 55, atrPosition: 50, supportResistance: 50, priceAction: 50 },
-          risk: { volatility: 50, liquidity: 50, event: 50, market: 50, sector: 50, data: 50 },
+          risk: { volatility: 50, liquidity: 50, event: 50, market: 50, sector: 50, data: 50, overheating: 50, trendBreakdown: 50, valuation: 50, breakoutFailure: 50 },
           conviction: { dataConfidence: 70, multiLayerAlignment: 50, technicalConfirmation: 50, fundamentalConfirmation: 50, llmConfidence: 50 },
         },
-      } as any,
+      } as ScoringOutput,
       classification: {
         action: "watch" as const, tier: "C" as const,
         tierReason: "below entry threshold",
-        gates: {} as any,
+        gates: {},
+        gateDetails: [],
+        reasons: [{ code: "below_entry_threshold", message: "below entry threshold", severity: "warning" as const }],
         scenario: null,
       },
-    };
+    } as ScoredSymbol;
 
     const pack = generateExternalPack(scored, null, { anonymize: false });
     expect(pack).toContain("Sony");

@@ -5,6 +5,7 @@ import type { ScoredSymbol, DailyScanResult } from "../jobs/types";
 import { computeAllIndicators, computeDataConfidence } from "../indicators/calculator";
 import { computeAllLayers } from "../intelligence/orchestrator";
 import { InvestmentAnalysisEngine } from "../analysis";
+import { generateStorylineSet } from "../storylines";
 
 const MOCK_SYMBOLS: Symbol[] = [
   { id: "s1", symbol: "7203.T", name: "トヨタ自動車", asset_type: "jp_stock", exchange: "TSE", currency: "JPY", sector: "Transportation Equipment", industry: "自動車", country: "JP", is_active: true, created_at: "", updated_at: "" },
@@ -143,13 +144,23 @@ export async function runMockScan(): Promise<DailyScanResult> {
     scored.push({ symbol: sym, snapshot: snap, layer: sl ?? { layer_name: "symbol", scope_key: sym.symbol, timeframe: "1D", captured_at: capturedAt, condition: "neutral", trend: "stable", strength: 50, risk: 50, confidence: 30, impact: "neutral", reason: "", data_confidence: 0 }, scores: analysis.scores, classification: analysis.classification });
   }
   scored.sort((a, b) => b.scores.finalEntryScore - a.scores.finalEntryScore);
+  const strongSignals = scored.filter((s) => s.classification.action === "strong_entry_candidate");
+  const entryCandidates = scored.filter((s) => s.classification.action === "entry_candidate");
+  const watchList = scored.filter((s) => s.classification.action === "watch");
+  const avoided = scored.filter((s) => s.classification.action === "avoid");
+  const storylineSets = [...strongSignals, ...entryCandidates, ...watchList].slice(0, 10).map((s) => generateStorylineSet({
+    scored: s,
+    dataConfidence: dataConfidence[s.symbol.symbol] ?? 70,
+    generatedAt: capturedAt,
+  }));
   return {
     context: { date: dateStr, symbols: MOCK_SYMBOLS, snapshots, benchmarkSnapshots, sectors, themes, layerResults, dataConfidence },
     scoredSymbols: scored,
-    strongSignals: scored.filter((s) => s.classification.action === "strong_entry_candidate"),
-    entryCandidates: scored.filter((s) => s.classification.action === "entry_candidate"),
-    watchList: scored.filter((s) => s.classification.action === "watch"),
-    avoided: scored.filter((s) => s.classification.action === "avoid"),
+    strongSignals,
+    entryCandidates,
+    watchList,
+    avoided,
+    storylineSets,
     totalCostUsd: 0, errors: [], startedAt, finishedAt: new Date().toISOString(),
   };
 }

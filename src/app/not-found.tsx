@@ -2,11 +2,17 @@ import Link from "next/link";
 
 export default function NotFound() {
   return (
-    <div className="page-container" style={{ textAlign: "center", paddingTop: 72 }}>
-      <div className="font-mono" style={{ fontSize: 56, fontWeight: 500, color: "var(--color-border-sand)", letterSpacing: "-0.03em", marginBottom: 8 }}>404</div>
-      <h1 style={{ fontSize: 18, fontWeight: 400, letterSpacing: "-0.005em" }}>ページが見つかりません</h1>
-      <p style={{ fontSize: 13, color: "var(--color-muted-clay)", marginTop: 4, marginBottom: 20 }}>お探しのページは存在しません。</p>
-      <Link href="/" className="btn btn-primary no-underline" style={{ display: "inline-flex" }}>ホームに戻る</Link>
+    <div className="page-container" style={{ paddingTop: 72 }}>
+      <div className="card state-panel">
+        <div className="state-panel-head">
+          <div>
+            <div className="stat-label">404</div>
+            <div className="state-panel-title">ページが見つかりません</div>
+            <p className="state-panel-copy">URLが変わったか、存在しないページを開いています。</p>
+          </div>
+          <Link href="/" className="btn btn-primary no-underline">ホームに戻る</Link>
+        </div>
+      </div>
     </div>
   );
 }

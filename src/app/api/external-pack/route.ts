@@ -17,7 +17,7 @@ export async function GET(req: NextRequest) {
     return new NextResponse(pack, {
       headers: { "Content-Type": "text/markdown; charset=utf-8", "Content-Disposition": `attachment; filename="signal-analysis-${target.symbol.symbol}.md"` },
     });
-  } catch (error) {
+  } catch {
     return NextResponse.json({ error: "Failed to generate pack" }, { status: 500 });
   }
 }

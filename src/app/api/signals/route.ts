@@ -4,6 +4,7 @@ import { runMockScan } from "@/lib/mock/provider";
 export async function GET() {
   try {
     const result = await runMockScan();
+    const storylineMap = new Map(result.storylineSets.map((storyline) => [storyline.symbol, storyline]));
     const symbolLayerMap = new Map(result.context.layerResults.symbols.map((layer) => [layer.scope_key, layer]));
     const sectorLayerMap = new Map(result.context.layerResults.sectors.map((layer) => [layer.scope_key, layer]));
     const themeLayerMap = new Map(result.context.layerResults.themes.map((layer) => [layer.scope_key, layer]));
@@ -49,6 +50,7 @@ export async function GET() {
         final: s.scores.finalEntryScore,
       },
       scenario: s.classification.scenario,
+      storyline: storylineMap.get(s.symbol.symbol) ?? null,
       reason: s.classification.tierReason,
       snapshot: s.snapshot,
       fundamentals: buildFundamentals(s.symbol.symbol, s.scores.finalEntryScore, s.scores.riskScore),
@@ -130,7 +132,7 @@ export async function GET() {
       },
       date: result.context.date,
     });
-  } catch (error) {
+  } catch {
     return NextResponse.json({ error: "Failed to generate signals" }, { status: 500 });
   }
 }

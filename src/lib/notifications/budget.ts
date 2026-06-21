@@ -1,7 +1,7 @@
 import type { NotificationBudget, CooldownState, NotificationPriority } from "./types";
 
 /**
- * Notification Budget Manager — enforces daily limits and per-symbol cooldowns.
+ * Notification Budget Manager - enforces daily limits and per-symbol cooldowns.
  *
  * Budget is reset daily. Cooldown prevents spamming the same symbol within a window.
  */

@@ -38,6 +38,13 @@ const flow = [
   ["Risk", "制御", ShieldCheck],
 ] satisfies [string, string, LucideIcon][];
 
+const deskActions = [
+  { label: "1. 地合い", title: "市場と業界の強弱を見る", href: "/dashboard" },
+  { label: "2. 候補", title: "候補銘柄をファクトで絞る", href: "/candidates" },
+  { label: "3. 比較", title: "同業比較で判断を固める", href: "/compare" },
+  { label: "4. 管理", title: "ポジションと安全装置を確認", href: "/positions" },
+];
+
 export default function Home() {
   return (
     <div className="page-container">
@@ -97,6 +104,15 @@ export default function Home() {
             ))}
           </div>
         </div>
+      </section>
+
+      <section className="desk-action-strip" aria-label="今日の確認順">
+        {deskActions.map((action) => (
+          <Link key={action.label} href={action.href} className="desk-action-item no-underline">
+            <span className="stat-label">{action.label}</span>
+            <strong>{action.title}</strong>
+          </Link>
+        ))}
       </section>
 
       <div className="home-section-head">

@@ -1,7 +1,7 @@
 import type { ManualPositionInput, ManualExecutionInput, PositionSummary } from "./types";
 
 /**
- * Manual Trade Engine — entry, exit, P&L calculation.
+ * Manual Trade Engine - entry, exit, P&L calculation.
  */
 export function createPosition(input: ManualPositionInput): Omit<ManualPositionInput, never> & {
   status: "open";

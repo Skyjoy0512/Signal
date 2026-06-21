@@ -1,4 +1,5 @@
 import Image from "next/image";
+import type { CSSProperties } from "react";
 import { BarChart3, CalendarClock, Scale, Target, Trophy } from "lucide-react";
 import { ScoreRing } from "@/components/visual-primitives";
 
@@ -8,6 +9,24 @@ export default function ReviewPage() {
       <div className="page-header">
         <h1 className="page-title">レビュー / 結果</h1>
         <p className="page-subtitle">1週間 · 1ヶ月 · 3ヶ月の結果追跡とベンチマーク比較</p>
+      </div>
+
+      <div className="image-context-grid">
+        <ContextCard
+          title="1週間後"
+          copy="初動、損切り接近、出来高変化を確認します"
+          image="https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=900&q=80&fit=crop"
+        />
+        <ContextCard
+          title="1ヶ月後"
+          copy="仮説の継続性と業界地合いを見直します"
+          image="https://images.unsplash.com/photo-1460925895917-afdab827c52f?w=900&q=80&fit=crop"
+        />
+        <ContextCard
+          title="3ヶ月後"
+          copy="MFE / MAE とRR達成度を次の判断へ戻します"
+          image="https://images.unsplash.com/photo-1518186285589-2f7649de83e0?w=900&q=80&fit=crop"
+        />
       </div>
 
       <div className="grid-stats" style={{ marginBottom: 14 }}>
@@ -68,6 +87,17 @@ export default function ReviewPage() {
         </div>
         <div className="empty-state-title">レビューデータはまだありません</div>
         <div className="empty-state-copy">ポジションを保有すると、1週間・1ヶ月・3ヶ月のタイミングで結果が自動追跡されます。</div>
+      </div>
+    </div>
+  );
+}
+
+function ContextCard({ title, copy, image }: { title: string; copy: string; image: string }) {
+  return (
+    <div className="context-card" style={{ "--context-image": `url(${image})` } as CSSProperties}>
+      <div>
+        <div style={{ fontSize: 16, fontWeight: 600 }}>{title}</div>
+        <div style={{ color: "#dfe8dc", fontSize: 12, lineHeight: 1.55, marginTop: 5 }}>{copy}</div>
       </div>
     </div>
   );

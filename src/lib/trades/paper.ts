@@ -3,7 +3,7 @@ import type { SignalAction } from "../supabase/types";
 import type { ScoredSymbol } from "../jobs/types";
 
 /**
- * Paper Trade Engine — auto-creates paper trades from signals.
+ * Paper Trade Engine - auto-creates paper trades from signals.
  */
 export function createPaperTradeFromSignal(
   scored: ScoredSymbol,

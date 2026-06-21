@@ -1,4 +1,4 @@
-import { computeAllScores } from "../scoring/scoring-engine";
+import { applyTechnicalQualityOverlay, computeAllScores } from "../scoring/scoring-engine";
 import { detectSignal } from "../scoring/signal-detector";
 import type { ScoringInput } from "../scoring/types";
 import { computeAdvancedSignalFeatures } from "./advanced-engine";
@@ -17,12 +17,11 @@ export class RuleBasedAnalysisEngine implements AnalysisLogicEngine {
       isForbidden: subject.isForbidden,
       fundamentals: subject.fundamentals,
     };
-    const scores = computeAllScores(scoringInput);
+    let scores = computeAllScores(scoringInput);
 
     if (subject.priceHistory && subject.priceHistory.length > 0) {
       const advanced = computeAdvancedSignalFeatures(subject.priceHistory);
-      scores.finalEntryScore = Math.round(scores.finalEntryScore * 0.85 + advanced.qualityScore * 0.15);
-      scores.convictionScore = Math.round(scores.convictionScore * 0.9 + advanced.qualityScore * 0.1);
+      scores = applyTechnicalQualityOverlay(scores, scoringInput, advanced.qualityScore, advanced.reasons);
     }
 
     const classification = detectSignal({

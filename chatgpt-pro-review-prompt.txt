@@ -1,0 +1,127 @@
+以下のGitHubリポジトリをレビューし、最後にCodexへそのまま渡せる実装指示書を .txt 形式の本文として出力してください。
+
+Repository:
+https://github.com/Skyjoy0512/Signal
+
+プロジェクト概要:
+このプロジェクトは、個人投資家向けの日本株投資判断支援アプリ「Signal」です。
+目的は、銘柄データ、テクニカル指標、市場/セクター/テーマ/銘柄レイヤー分析、スコアリング、LLM補助分析を組み合わせて、投資候補の発見と判断材料の整理を行うことです。
+
+重要:
+これは投資助言の依頼ではありません。
+ソフトウェア設計、分析ロジック、データ設計、保守性、テスト容易性、将来のLLM差し替え容易性のレビューです。
+
+重点的に見てほしい領域:
+- src/lib/analysis
+- src/lib/scoring
+- src/lib/intelligence
+- src/lib/indicators
+- src/lib/llm
+- src/lib/jobs/daily-scan.ts
+- src/lib/mock/provider.ts
+- supabase/migrations
+- docs
+
+レビュー観点:
+1. 全体アーキテクチャのリファクタリング余地
+- ディレクトリ構成
+- 責務分離
+- 依存方向
+- Next.js app層、jobs層、analysis/scoring/llm層、data-source層、supabase層の境界
+- 分析ロジックとLLMプロバイダーレイヤーの独立性
+- テストしやすさ、保守しやすさ、拡張しやすさ
+
+2. 分析ロジックの高度化余地
+- opportunity / entryTiming / risk / conviction / finalEntryScore の設計
+- スコア重み付け
+- signal classification
+- strategyTags
+- 日本株向けの特徴量
+- リスク評価
+- バックテスト/検証可能性
+- データ品質とconfidenceの扱い
+- ルールベースで固定すべき部分とLLMに任せるべき部分
+
+3. LLM活用設計の改善余地
+- src/lib/llm
+- src/lib/analysis/llm-enhancer.ts
+- プロンプト設計
+- JSON schema
+- critic/repair設計
+- LLMが高性能化した場合にAPI接続だけで差し替えられるか
+- LLM出力をスコアに反映する安全性
+- hallucinationや過剰補正の制御
+
+4. データ/DB設計の改善余地
+- Supabase schema
+- signal履歴
+- score breakdown保存
+- LLM run保存
+- バックテストや評価ログに必要なデータ
+- 将来的な分析改善に必要なデータ蓄積
+
+出力形式:
+まずレビュー結果を簡潔に出してください。
+その後、最後に必ず以下の形式で「Codexに渡す実装指示書」を出力してください。
+
+最終セクションのタイトルは必ず以下にしてください。
+
+# CODEX_IMPLEMENTATION_INSTRUCTIONS.txt
+
+このセクションは、私がそのままコピーしてCodexに渡します。
+したがって、Codexが迷わず実装できるように、具体的なファイル名、関数名、変更内容、テスト条件を含めてください。
+
+実装指示書には以下を含めてください。
+
+1. Objective
+- 今回の実装目的を1段落で説明
+
+2. Scope
+- 対象ファイル/ディレクトリ
+- 対象外にするもの
+
+3. Priority
+P0/P1/P2/P3で分類してください。
+P0とP1は必ず実装可能な粒度に分解してください。
+P2/P3は将来タスクとして残してもよいです。
+
+4. Implementation Tasks
+各タスクごとに以下を含めてください。
+- Task ID
+- Priority
+- Target files
+- Current problem
+- Required change
+- Detailed implementation steps
+- Acceptance criteria
+- Tests to add/update
+- Risk/notes
+
+5. Suggested File Structure
+必要なら新規ファイル/移動/分割案を示してください。
+
+6. Testing Plan
+- npm run typecheck
+- npm test
+- npm run lint
+に加えて、追加すべきテストがあれば書いてください。
+
+7. Non-goals
+今回やらないことを明記してください。
+特にUIデザイン変更や投資助言の作成は対象外にしてください。
+
+8. Codex Notes
+Codexへの注意事項を書いてください。
+例:
+- 既存のUI作業と衝突しないよう、主に src/lib 配下に限定する
+- 秘密情報をGitに入れない
+- 既存テストを壊さない
+- 変更後は typecheck/test/lint を実行する
+- 可能なら小さなコミット単位に分ける
+
+重要な制約:
+- 一般論ではなく、このRepositoryの実コードに基づいて指摘してください。
+- 具体的なファイルパスと関数名を挙げてください。
+- 改善案だけでなく、実装可能な作業単位まで落としてください。
+- 実装指示書はCodexが読んでそのまま作業に入れる詳細度にしてください。
+- 日本語で出力してください。

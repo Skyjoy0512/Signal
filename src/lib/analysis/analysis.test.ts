@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { InvestmentAnalysisEngine, RuleBasedAnalysisEngine, buildLlmInputSnapshot } from "./index";
+import { sanitizeLlmScoreAdjustment } from "./llm-enhancer";
 import type { AnalysisSubject, LogicAnalysisResult, LlmEnhancer } from "./types";
 import type { LayerCondition, SymbolSnapshot } from "../intelligence/types";
 
@@ -81,5 +82,25 @@ describe("InvestmentAnalysisEngine", () => {
     const llmInput = buildLlmInputSnapshot(subject(), logic);
     expect(llmInput.symbol).toBe("7203.T");
     expect(llmInput.layers.symbol?.scopeKey).toBe("7203.T");
+    expect(llmInput.scoreContributions?.finalEntry.length).toBeGreaterThan(0);
+    expect(llmInput.gateDetails?.length).toBeGreaterThan(0);
+    expect(llmInput.decisionReasons?.length).toBeGreaterThan(0);
+    expect(llmInput.scenario?.calculationMethod).toBeTruthy();
+  });
+
+  it("blocks optimistic LLM adjustments when risk controls fail", () => {
+    const riskySubject = { ...subject(), dataConfidence: 45, eventBlockerActive: true };
+    const logic = new RuleBasedAnalysisEngine().analyze(riskySubject);
+    const guarded = sanitizeLlmScoreAdjustment(riskySubject, logic, {
+      opportunity: 8,
+      entryTiming: 6,
+      risk: -7,
+      conviction: 5,
+      reason: "optimistic read",
+    });
+    expect(guarded.opportunity).toBeLessThanOrEqual(0);
+    expect(guarded.entryTiming).toBeLessThanOrEqual(0);
+    expect(guarded.risk).toBeGreaterThanOrEqual(0);
+    expect(guarded.reason).toContain("Guarded");
   });
 });

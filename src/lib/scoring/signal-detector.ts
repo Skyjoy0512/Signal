@@ -1,6 +1,7 @@
 import type { LayerCondition, SymbolSnapshot } from "../intelligence/types";
-import type { ScoringOutput, SignalClassification, TradeScenario } from "./types";
+import type { ScoringOutput, SignalClassification, SignalDecisionReason, SignalGateDetail, TradeScenario } from "./types";
 import { computeTradeScenario } from "./target-stop";
+import { SIGNAL_THRESHOLDS } from "./config";
 
 export interface SignalDetectorInput {
   scores: ScoringOutput; market: LayerCondition | null; symbol: LayerCondition | null;
@@ -25,34 +26,111 @@ export function detectSignal(input: SignalDetectorInput): SignalClassification {
       swingHigh: input.swingHigh,
       swingLow: input.swingLow,
       high6m: input.high6m,
+      strategyTags: scores.strategyTags,
     });
   } catch { /* fallback: scenario stays null */ }
-  const rrOk = scenario ? scenario.riskRewardBase >= 1.2 : false;
-  const gates = { finalEntryScoreGate: scores.finalEntryScore >= 60, entryTimingGate: scores.entryTimingScore >= 60, convictionGate: scores.convictionScore >= 60, riskGate: scores.riskScore <= 60, rrGate: rrOk, dataConfidenceGate: dataConfidence >= 60, eventBlockerGate: !eventBlockerActive, forbiddenGate: !isForbidden };
+  const rrOk = scenario ? scenario.riskRewardBase >= SIGNAL_THRESHOLDS.riskRewardMinimum : false;
+  const gateDetails = buildGateDetails({ scores, dataConfidence, eventBlockerActive, isForbidden, riskReward: scenario?.riskRewardBase ?? null, rrOk });
+  const gates = Object.fromEntries(gateDetails.map((gate) => [gate.key, gate.passed]));
 
-  if (isForbidden) return { action: "avoid", tier: "D", tierReason: "forbidden symbol", blockerReason: "Forbidden", gates, scenario };
-  if (dataConfidence < 60) return { action: "avoid", tier: "D", tierReason: `low data confidence (${dataConfidence})`, gates, scenario };
+  if (isForbidden) {
+    const reasons = [{ code: "forbidden_symbol", message: "forbidden symbol", severity: "blocker" as const }];
+    return buildClassification("avoid", "D", reasons, gates, gateDetails, scenario, "Forbidden");
+  }
+  if (dataConfidence < SIGNAL_THRESHOLDS.dataConfidenceMinimum) {
+    const reasons = [{ code: "low_data_confidence", message: `low data confidence (${dataConfidence})`, severity: "blocker" as const }];
+    return buildClassification("avoid", "D", reasons, gates, gateDetails, scenario);
+  }
 
   let action: SignalClassification["action"] = "avoid", tier: SignalClassification["tier"] = "D";
-  const tr: string[] = [];
+  const reasons: SignalDecisionReason[] = [];
 
-  if (scores.finalEntryScore >= 80 && scores.entryTimingScore >= 70 && scores.convictionScore >= 70 && scores.riskScore <= 45 && rrOk && dataConfidence >= 80 && !eventBlockerActive) {
-    action = "strong_entry_candidate"; tier = scores.finalEntryScore >= 88 ? "S" : "A"; tr.push("all strong gates passed");
-  } else if (scores.finalEntryScore >= 70 && scores.entryTimingScore >= 60 && scores.convictionScore >= 60 && scores.riskScore <= 60 && rrOk && dataConfidence >= 70) {
-    action = "entry_candidate"; tier = scores.finalEntryScore >= 78 ? "A" : "B"; tr.push("entry gates passed");
-  } else if (scores.finalEntryScore >= 60 && scores.riskScore <= 75 && rrOk) {
-    action = "watch"; tier = scores.finalEntryScore >= 68 ? "B" : "C";
-    const weak: string[] = [];
-    if (scores.entryTimingScore < 60) weak.push("entry timing weak");
-    if (dataConfidence < 70) weak.push("data confidence borderline");
-    if (!gates.eventBlockerGate) weak.push("event blocker active");
-    tr.push(weak.length > 0 ? weak.join("; ") : "below entry threshold");
+  if (scores.finalEntryScore >= SIGNAL_THRESHOLDS.finalStrongMinimum && scores.entryTimingScore >= SIGNAL_THRESHOLDS.entryTimingStrongMinimum && scores.convictionScore >= SIGNAL_THRESHOLDS.convictionStrongMinimum && scores.riskScore <= SIGNAL_THRESHOLDS.riskStrongMaximum && rrOk && dataConfidence >= SIGNAL_THRESHOLDS.dataConfidenceStrong && !eventBlockerActive) {
+    action = "strong_entry_candidate"; tier = scores.finalEntryScore >= SIGNAL_THRESHOLDS.finalTierSMinimum ? "S" : "A";
+    reasons.push({ code: "strong_gates_passed", message: "all strong gates passed", severity: "info" });
+  } else if (scores.finalEntryScore >= SIGNAL_THRESHOLDS.finalEntryMinimum && scores.entryTimingScore >= SIGNAL_THRESHOLDS.entryTimingMinimum && scores.convictionScore >= SIGNAL_THRESHOLDS.convictionMinimum && scores.riskScore <= SIGNAL_THRESHOLDS.riskEntryMaximum && rrOk && dataConfidence >= SIGNAL_THRESHOLDS.dataConfidenceEntry) {
+    action = "entry_candidate"; tier = scores.finalEntryScore >= SIGNAL_THRESHOLDS.finalTierAMinimum ? "A" : "B";
+    reasons.push({ code: "entry_gates_passed", message: "entry gates passed", severity: "info" });
+  } else if (scores.finalEntryScore >= SIGNAL_THRESHOLDS.finalWatchMinimum && scores.riskScore <= SIGNAL_THRESHOLDS.riskWatchMaximum && rrOk) {
+    action = "watch"; tier = scores.finalEntryScore >= SIGNAL_THRESHOLDS.finalTierBMinimum ? "B" : "C";
+    if (scores.entryTimingScore < SIGNAL_THRESHOLDS.entryTimingMinimum) reasons.push({ code: "entry_timing_weak", message: "entry timing weak", severity: "warning" });
+    if (dataConfidence < SIGNAL_THRESHOLDS.dataConfidenceEntry) reasons.push({ code: "data_confidence_borderline", message: "data confidence borderline", severity: "warning" });
+    if (!gates.eventBlockerGate) reasons.push({ code: "event_blocker_active", message: "event blocker active", severity: "blocker" });
+    reasons.push(...topWeakContributionReasons(scores, "warning"));
+    if (reasons.length === 0) reasons.push({ code: "below_entry_threshold", message: "below entry threshold", severity: "warning" });
   } else {
-    const bl: string[] = [];
-    if (scores.riskScore >= 75) bl.push("high risk");
-    if (!rrOk) bl.push("insufficient RR");
-    if (!gates.eventBlockerGate) bl.push("event blocker active");
-    tr.push(bl.length > 0 ? bl.join("; ") : "below minimum thresholds");
+    if (scores.riskScore >= SIGNAL_THRESHOLDS.riskWatchMaximum) reasons.push({ code: "high_risk", message: "high risk", severity: "blocker" });
+    if (!rrOk) reasons.push({ code: "insufficient_risk_reward", message: "insufficient RR", severity: "blocker" });
+    if (!gates.eventBlockerGate) reasons.push({ code: "event_blocker_active", message: "event blocker active", severity: "blocker" });
+    reasons.push(...topWeakContributionReasons(scores, "blocker"));
+    if (reasons.length === 0) reasons.push({ code: "below_minimum_thresholds", message: "below minimum thresholds", severity: "warning" });
   }
-  return { action, tier, tierReason: tr.join("; "), blockerReason: action === "avoid" ? tr.join("; ") : undefined, gates, scenario };
+  return buildClassification(action, tier, reasons, gates, gateDetails, scenario);
+}
+
+function topWeakContributionReasons(scores: ScoringOutput, severity: SignalDecisionReason["severity"]): SignalDecisionReason[] {
+  return [...scores.contributions.risk, ...scores.contributions.entryTiming, ...scores.contributions.opportunity]
+    .filter((contribution) => contribution.polarity === "negative")
+    .sort((a, b) => b.contribution - a.contribution)
+    .slice(0, 2)
+    .map((contribution) => ({
+      code: `weak_${contribution.component}_${contribution.feature}`,
+      message: `${contribution.label}: ${contribution.reason}`,
+      severity,
+    }));
+}
+
+function buildGateDetails(input: {
+  scores: ScoringOutput;
+  dataConfidence: number;
+  eventBlockerActive: boolean;
+  isForbidden: boolean;
+  riskReward: number | null;
+  rrOk: boolean;
+}): SignalGateDetail[] {
+  const { scores, dataConfidence, eventBlockerActive, isForbidden, riskReward, rrOk } = input;
+  return [
+    gate("finalEntryScoreGate", "Final entry score", scores.finalEntryScore >= SIGNAL_THRESHOLDS.finalWatchMinimum, scores.finalEntryScore, SIGNAL_THRESHOLDS.finalWatchMinimum, "warning", `final entry score is ${scores.finalEntryScore}`),
+    gate("entryTimingGate", "Entry timing", scores.entryTimingScore >= SIGNAL_THRESHOLDS.entryTimingMinimum, scores.entryTimingScore, SIGNAL_THRESHOLDS.entryTimingMinimum, "warning", `entry timing score is ${scores.entryTimingScore}`),
+    gate("convictionGate", "Conviction", scores.convictionScore >= SIGNAL_THRESHOLDS.convictionMinimum, scores.convictionScore, SIGNAL_THRESHOLDS.convictionMinimum, "warning", `conviction score is ${scores.convictionScore}`),
+    gate("riskGate", "Risk", scores.riskScore <= SIGNAL_THRESHOLDS.riskEntryMaximum, scores.riskScore, SIGNAL_THRESHOLDS.riskEntryMaximum, "blocker", `risk score is ${scores.riskScore}`),
+    gate("rrGate", "Risk/reward", rrOk, riskReward, SIGNAL_THRESHOLDS.riskRewardMinimum, "blocker", riskReward == null ? "risk/reward could not be computed" : `risk/reward is ${Math.round(riskReward * 100) / 100}`),
+    gate("dataConfidenceGate", "Data confidence", dataConfidence >= SIGNAL_THRESHOLDS.dataConfidenceMinimum, dataConfidence, SIGNAL_THRESHOLDS.dataConfidenceMinimum, "blocker", `data confidence is ${dataConfidence}`),
+    gate("eventBlockerGate", "Event blocker", !eventBlockerActive, eventBlockerActive, false, "blocker", eventBlockerActive ? "event blocker is active" : "no event blocker is active"),
+    gate("forbiddenGate", "Forbidden symbol", !isForbidden, isForbidden, false, "blocker", isForbidden ? "symbol is forbidden" : "symbol is allowed"),
+  ];
+}
+
+function gate(
+  key: string,
+  label: string,
+  passed: boolean,
+  actual: number | boolean | null,
+  threshold: number | boolean,
+  severity: SignalGateDetail["severity"],
+  reason: string,
+): SignalGateDetail {
+  return { key, label, passed, actual, threshold, severity, reason };
+}
+
+function buildClassification(
+  action: SignalClassification["action"],
+  tier: SignalClassification["tier"],
+  reasons: SignalDecisionReason[],
+  gates: Record<string, boolean>,
+  gateDetails: SignalGateDetail[],
+  scenario: TradeScenario | null,
+  blockerReason?: string,
+): SignalClassification {
+  const tierReason = reasons.map((reason) => reason.message).join("; ");
+  return {
+    action,
+    tier,
+    tierReason,
+    blockerReason: blockerReason ?? (action === "avoid" ? tierReason : undefined),
+    gates,
+    gateDetails,
+    reasons,
+    scenario,
+  };
 }

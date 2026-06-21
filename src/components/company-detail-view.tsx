@@ -124,6 +124,21 @@ export function CompanyDetailView({
         </section>
       </div>
 
+      <div className="insight-action-strip">
+        <button type="button" className="insight-action" onClick={() => setTab("peers")}>
+          <span className="stat-label">次の確認</span>
+          <strong>同業比較で位置を見る</strong>
+        </button>
+        <button type="button" className="insight-action" onClick={() => setTab("financials")}>
+          <span className="stat-label">ファクト確認</span>
+          <strong>業績推移を確認する</strong>
+        </button>
+        <button type="button" className="insight-action" onClick={() => setTab("documents")}>
+          <span className="stat-label">資料</span>
+          <strong>IR資料へ進む</strong>
+        </button>
+      </div>
+
       <div className="grid-stats" style={{ marginBottom: 14 }}>
         <MetricCard label="売上" value={latest.revenue.toLocaleString()} sub="百万円換算のモック" />
         <MetricCard label="営業利益率" value={`${latest.operatingMargin}%`} sub="本業の稼ぐ力" score={latest.operatingMargin * 5} />

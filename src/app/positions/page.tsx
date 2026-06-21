@@ -132,6 +132,22 @@ export default function PositionsPage() {
         </div>
       </div>
 
+      <div className="card ops-checklist" style={{ marginBottom: 14 }}>
+        {[
+          { title: "安全装置", copy: ks.allowed ? "新規判断を続行できます" : ks.reason ?? "ブロック中です", state: ks.allowed ? "正常" : "停止" },
+          { title: "評価損益", copy: `${totalPnl >= 0 ? "+" : ""}¥${totalPnl.toLocaleString()} / ${totalPnlPct >= 0 ? "+" : ""}${totalPnlPct.toFixed(1)}%`, state: totalPnl >= 0 ? "プラス" : "マイナス" },
+          { title: "次の確認", copy: showPositions ? "保有銘柄をレビューへ送れます" : "更新後に一覧を確認します", state: showPositions ? "準備済み" : "待機" },
+        ].map((item) => (
+          <div key={item.title} className="ops-check-item">
+            <div>
+              <div className="stat-label">{item.title}</div>
+              <div className="ops-check-copy">{item.copy}</div>
+            </div>
+            <span className="badge badge-outline">{item.state}</span>
+          </div>
+        ))}
+      </div>
+
       {/* Positions list */}
       {showPositions && (
         <div className="card" style={{ marginBottom: 14 }}>

@@ -1,3 +1,6 @@
+import type { ScoreContribution } from "../scoring/types";
+import type { SignalDecisionReason, SignalGateDetail } from "../scoring/types";
+
 export type LlmProviderType = "deepseek" | "openai-compatible";
 export type LlmModelRole = "reasoning" | "critic" | "worker";
 export type LlmRunStatus = "pending" | "running" | "completed" | "failed" | "repaired";
@@ -5,8 +8,17 @@ export type LlmRunStatus = "pending" | "running" | "completed" | "failed" | "rep
 export interface LlmInputSnapshot {
   symbol: string; symbolName?: string;
   scores: { opportunity: number; entryTiming: number; risk: number; conviction: number; finalEntry: number; };
+  scoreContributions?: {
+    opportunity: ScoreContribution[];
+    entryTiming: ScoreContribution[];
+    risk: ScoreContribution[];
+    conviction: ScoreContribution[];
+    finalEntry: ScoreContribution[];
+  };
+  gateDetails?: SignalGateDetail[];
+  decisionReasons?: SignalDecisionReason[];
   strategyTags: string[];
-  scenario?: { entryPrice: number; stopPrice: number; targetBase: number; riskRewardBase: number; };
+  scenario?: { entryPrice: number; stopPrice: number; targetBase: number; riskRewardBase: number; expectedHoldingPeriod?: string; calculationMethod?: string; };
   layers: { market?: LlmLayerSnapshot; sector?: LlmLayerSnapshot; theme?: LlmLayerSnapshot; symbol?: LlmLayerSnapshot; };
   dataConfidence: number; eventBlockerActive: boolean;
 }

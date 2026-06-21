@@ -2,7 +2,7 @@
 
 import type { CSSProperties } from "react";
 import { useEffect, useState } from "react";
-import { Brain, Database, GitCompareArrows } from "lucide-react";
+import { Brain, Database, GitCompareArrows, RotateCcw, X } from "lucide-react";
 import type { EnrichedCompany } from "@/lib/fundamentals/provider";
 import { ScoreRing } from "@/components/visual-primitives";
 
@@ -29,6 +29,8 @@ export default function ComparePage() {
     return () => { cancelled = true; };
   }, []);
   const selectedCompanies = companies.filter((company) => selected.includes(company.ticker));
+  const loading = sourceLabel === "読み込み中";
+  const resetSelection = () => setSelected(companies.slice(0, 3).map((company) => company.ticker));
   const factRows = [
     { label: "売上", values: selectedCompanies.map((c) => c.latest.revenue.toLocaleString()) },
     { label: "営業利益", values: selectedCompanies.map((c) => c.latest.operatingIncome.toLocaleString()) },
@@ -72,15 +74,47 @@ export default function ComparePage() {
         />
       </div>
 
-      <div className="card" style={{ marginBottom: 14 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}>
-          <span className="semantic-icon"><GitCompareArrows size={18} /></span>
-          <div>
-            <div style={{ fontWeight: 600 }}>比較する企業</div>
-            <p className="meaning-note">最大5社まで選択できます。</p>
+      {loading && (
+        <div className="card state-panel" style={{ marginBottom: 14 }}>
+          <div className="state-panel-head">
+            <div>
+              <div className="stat-label">Loading</div>
+              <div className="state-panel-title">比較データを読み込み中</div>
+              <p className="state-panel-copy">企業マスターと財務指標を取得しています。</p>
+            </div>
+            <span className="badge badge-outline">読み込み中</span>
+          </div>
+          <div className="skeleton-grid">
+            {[0, 1, 2].map((item) => (
+              <div key={item} className="skeleton-card">
+                <div className="skeleton-line short" />
+                <div className="skeleton-line long" />
+                <div className="skeleton-line medium" />
+              </div>
+            ))}
           </div>
         </div>
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+      )}
+
+      {!loading && <div className="card" style={{ marginBottom: 14 }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, marginBottom: 12 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <span className="semantic-icon"><GitCompareArrows size={18} /></span>
+            <div>
+              <div style={{ fontWeight: 600 }}>比較する企業</div>
+              <p className="meaning-note">最大5社まで選択できます。</p>
+            </div>
+          </div>
+          <button className="btn btn-ghost" onClick={resetSelection} type="button"><RotateCcw size={14} />初期化</button>
+        </div>
+        <div className="selection-summary">
+          <div>
+            <div className="stat-label">選択中</div>
+            <div className="selection-summary-title">{selectedCompanies.length ? selectedCompanies.map((company) => company.name).join(" / ") : "未選択"}</div>
+          </div>
+          <span className="badge badge-outline">{selectedCompanies.length}/5社</span>
+        </div>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 12 }}>
           {companies.map((company) => {
             const active = selected.includes(company.ticker);
             return (
@@ -91,13 +125,14 @@ export default function ComparePage() {
                 onClick={() => setSelected((current) => active ? current.filter((ticker) => ticker !== company.ticker) : current.length >= 5 ? current : [...current, company.ticker])}
               >
                 {company.name}
+                {active && <X size={11} />}
               </button>
             );
           })}
         </div>
-      </div>
+      </div>}
 
-      <div className="decision-lanes">
+      {!loading && selectedCompanies.length > 0 && <div className="decision-lanes">
         <section className="card lane-card">
           <div className="lane-header">
             <div>
@@ -118,9 +153,18 @@ export default function ComparePage() {
           </div>
           <p className="meaning-note">ROE、PER、PBRから優先確認すべき企業をざっくり分けます。</p>
         </section>
-      </div>
+      </div>}
 
-      <div className="card compare-matrix">
+      {!loading && selectedCompanies.length === 0 && (
+        <div className="card card-dashed empty-state empty-state-compact">
+          <div>
+            <h2>比較する企業を選択してください</h2>
+            <p>上の企業チップから1社以上を選ぶと、ファクトとインテリジェンスの比較表が表示されます。</p>
+          </div>
+        </div>
+      )}
+
+      {!loading && selectedCompanies.length > 0 && <div className="card compare-matrix">
         <table>
           <thead>
             <tr>
@@ -145,7 +189,7 @@ export default function ComparePage() {
             ))}
           </tbody>
         </table>
-      </div>
+      </div>}
     </div>
   );
 }

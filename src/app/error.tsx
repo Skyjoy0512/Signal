@@ -2,11 +2,17 @@
 
 export default function ErrorPage({ error, reset }: { error: Error & { digest?: string }; reset: () => void }) {
   return (
-    <div className="page-container" style={{ textAlign: "center", paddingTop: 72 }}>
-      <div className="font-mono" style={{ fontSize: 32, color: "var(--color-border-sand)", marginBottom: 12 }}>&#9888;</div>
-      <h1 style={{ fontSize: 18, fontWeight: 400, letterSpacing: "-0.005em" }}>エラーが発生しました</h1>
-      <p style={{ fontSize: 13, color: "var(--color-muted-clay)", marginTop: 4, marginBottom: 20 }}>{error.message || "予期せぬエラーです。"}</p>
-      <button onClick={reset} className="btn btn-primary">再試行</button>
+    <div className="page-container" style={{ paddingTop: 72 }}>
+      <div className="card state-panel">
+        <div className="state-panel-head">
+          <div>
+            <div className="stat-label">Error</div>
+            <div className="state-panel-title">エラーが発生しました</div>
+            <p className="state-panel-copy">{error.message || "予期せぬエラーです。"}</p>
+          </div>
+          <button onClick={reset} className="btn btn-primary">再試行</button>
+        </div>
+      </div>
     </div>
   );
 }

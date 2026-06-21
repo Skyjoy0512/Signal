@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { sma, rsi, atr, volumeIndicators, fiftyTwoWeekHighLow, drawdownFromRecentHigh, computeAllIndicators, computeDataConfidence } from "./calculator";
+import { sma, rsi, atr, fiftyTwoWeekHighLow, drawdownFromRecentHigh, computeAllIndicators, computeDataConfidence } from "./calculator";
 import type { IndicatorInput } from "./types";
 
 function makeBars(n: number, startPrice = 100, step = 1, volume = 10000): IndicatorInput[] {

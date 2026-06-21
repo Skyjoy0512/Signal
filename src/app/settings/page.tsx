@@ -1,4 +1,7 @@
 import { Bell, Bot, Database, KeyRound, LineChart, ShieldAlert } from "lucide-react";
+import { LlmSettingsPanel } from "@/components/llm-settings-panel";
+
+export const dynamic = "force-dynamic";
 
 export default function SettingsPage() {
   const vars = [
@@ -11,7 +14,12 @@ export default function SettingsPage() {
     { key: "LINE_USER_ID", desc: "通知の送信先", required: true },
     { key: "YFINANCE_PROXY_URL", desc: "市場データ取得プロキシ", required: false },
     { key: "DAILY_LLM_COST_LIMIT_USD", desc: "LLMコスト上限（既定: $3.00）", required: false },
-  ];
+  ].map((envVar) => ({ ...envVar, present: Boolean(process.env[envVar.key]) }));
+
+  const requiredVars = vars.filter((envVar) => envVar.required);
+  const optionalVars = vars.filter((envVar) => !envVar.required);
+  const configuredRequired = requiredVars.filter((envVar) => envVar.present).length;
+  const configuredOptional = optionalVars.filter((envVar) => envVar.present).length;
 
   const sys = [
     { title: "LLMプロバイダー", desc: "DeepSeek V4 Pro（推論）/ Flash（ワーカー）。JSON Schema検証 + 修復パイプライン。", icon: Bot },
@@ -28,6 +36,15 @@ export default function SettingsPage() {
           <code className="font-mono" style={{ background: "var(--color-border-sand)", padding: "1px 5px", borderRadius: 3, fontSize: 11 }}>.env.local</code> に環境変数を設定してください
         </p>
       </div>
+
+      <div className="grid-stats" style={{ marginBottom: 14 }}>
+        <SettingSummary label="必須キー" value={`${configuredRequired}/${requiredVars.length}`} sub={configuredRequired === requiredVars.length ? "接続準備完了" : "未設定があります"} />
+        <SettingSummary label="任意キー" value={`${configuredOptional}/${optionalVars.length}`} sub="補助機能・上限設定" />
+        <SettingSummary label="値の表示" value="非表示" sub="秘密情報は画面に出しません" />
+        <SettingSummary label="読み取り元" value=".env" sub="サーバー環境変数" />
+      </div>
+
+      <LlmSettingsPanel />
 
       <div className="card" style={{ marginBottom: 14 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
@@ -46,7 +63,10 @@ export default function SettingsPage() {
                 <code>{v.key}</code>
                 <span>{v.desc}</span>
               </div>
-              <span className={v.required ? "badge badge-dark" : "badge badge-outline"}>{v.required ? "必須" : "任意"}</span>
+              <div style={{ display: "flex", alignItems: "center", gap: 6, justifyContent: "flex-end" }}>
+                <span className={v.required ? "badge badge-dark" : "badge badge-outline"}>{v.required ? "必須" : "任意"}</span>
+                <span className={v.present ? "badge badge-outline" : "badge badge-ember"}>{v.present ? "設定済み" : "未設定"}</span>
+              </div>
             </div>
           ))}
         </div>
@@ -63,6 +83,16 @@ export default function SettingsPage() {
           </div>
         ))}
       </div>
+    </div>
+  );
+}
+
+function SettingSummary({ label, value, sub }: { label: string; value: string; sub: string }) {
+  return (
+    <div className="card">
+      <div className="stat-label">{label}</div>
+      <div className="stat-value stat-value-sm">{value}</div>
+      <div className="stat-sub">{sub}</div>
     </div>
   );
 }

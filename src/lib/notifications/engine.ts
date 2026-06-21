@@ -5,7 +5,7 @@ import { NotificationBudgetManager } from "./budget";
 import { buildMorningBrief, buildInstantAlert } from "./templates";
 
 /**
- * Notification Engine — coordinates LINE messaging with budget and cooldown.
+ * Notification Engine - coordinates LINE messaging with budget and cooldown.
  */
 export class NotificationEngine {
   private lineClient: LineClient;
@@ -37,7 +37,7 @@ export class NotificationEngine {
 
     const message = buildMorningBrief(data);
 
-    // Morning brief can be long — use push message
+    // Morning brief can be long - use push message
     const result = await this.lineClient.sendMessage(message);
     if (result.success) {
       this.budget.recordSent(key);
@@ -50,8 +50,9 @@ export class NotificationEngine {
    */
   async sendInstantAlert(
     data: InstantAlertData,
-    priority: NotificationPriority = "high",
+    _priority: NotificationPriority = "high",
   ): Promise<{ success: boolean; error?: string }> {
+    void _priority;
     const key = `instant:${data.symbol}:${data.action}`;
 
     const check = this.budget.canSend(key);

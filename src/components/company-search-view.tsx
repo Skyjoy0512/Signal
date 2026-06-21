@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import type { CSSProperties } from "react";
 import Link from "next/link";
 import { Building2, Database, Search } from "lucide-react";
 import type { EnrichedCompany, IndustrySummary } from "@/lib/fundamentals/provider";
@@ -39,6 +40,24 @@ export function CompanySearchView({
         </p>
       </div>
 
+      <div className="image-context-grid">
+        <ContextCard
+          title="企業名で探す"
+          copy="社名や証券コードから、詳細画面へすばやく移動します"
+          image="https://images.unsplash.com/photo-1454165804606-c3d57bc86b40?w=900&q=80&fit=crop"
+        />
+        <ContextCard
+          title="業界から入る"
+          copy="同業比較を前提に、規模・収益性・割高度を確認します"
+          image="https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?w=900&q=80&fit=crop"
+        />
+        <ContextCard
+          title="事業テーマで広げる"
+          copy="半導体、医薬品、銀行などのキーワードで候補を広げます"
+          image="https://images.unsplash.com/photo-1516321318423-f06f85e504b3?w=900&q=80&fit=crop"
+        />
+      </div>
+
       <div className="grid-stats" style={{ marginBottom: 14 }}>
         <SourceCard label="収録銘柄" value={`${companies.length}社`} sub="検索対象ユニバース" />
         <SourceCard label="収録業界" value={`${activeIndustryCount}業界`} sub="銘柄が紐づく東証33業種" />
@@ -61,6 +80,8 @@ export function CompanySearchView({
             onChange={(event) => setQuery(event.target.value)}
             placeholder="例: 半導体、医薬品、7203、トヨタ"
           />
+          <span className="search-count">{filtered.length}件</span>
+          {query && <button type="button" className="search-clear" onClick={() => setQuery("")}>クリア</button>}
         </label>
       </div>
 
@@ -68,6 +89,14 @@ export function CompanySearchView({
         <div className="company-table-head">
           {["企業", "業種", "売上", "営業利益率", "ROE", "詳細"].map((label) => <div key={label} className="stat-label">{label}</div>)}
         </div>
+        {filtered.length === 0 && (
+          <div className="empty-state empty-state-compact">
+            <div>
+              <h2>該当する企業がありません</h2>
+              <p>銘柄コード、業種、事業キーワードを短くして再検索してください。</p>
+            </div>
+          </div>
+        )}
         {filtered.map((company) => (
           <div key={company.ticker} className="company-table-row">
             <div className="company-cell-main">
@@ -84,6 +113,17 @@ export function CompanySearchView({
             <div className="company-table-cell"><span className="company-table-label">詳細</span><Link className="link" href={`/companies/${encodeURIComponent(company.ticker)}`}>企業詳細</Link></div>
           </div>
         ))}
+      </div>
+    </div>
+  );
+}
+
+function ContextCard({ title, copy, image }: { title: string; copy: string; image: string }) {
+  return (
+    <div className="context-card" style={{ "--context-image": `url(${image})` } as CSSProperties}>
+      <div>
+        <div style={{ fontSize: 16, fontWeight: 600 }}>{title}</div>
+        <div style={{ color: "#dfe8dc", fontSize: 12, lineHeight: 1.55, marginTop: 5 }}>{copy}</div>
       </div>
     </div>
   );

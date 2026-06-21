@@ -57,8 +57,17 @@ export default function DashboardPage() {
 
       {/* Error */}
       {error && (
-        <div className="card" style={{ marginBottom: 14 }}>
-          <span style={{ color: "var(--color-ember-orange)", fontSize: 12 }}>{error}</span>
+        <div className="card state-panel" style={{ marginBottom: 14 }}>
+          <div className="state-panel-head">
+            <div>
+              <div className="stat-label">Scan Error</div>
+              <div className="state-panel-title">日次スキャンに失敗しました</div>
+              <p className="state-panel-copy">{error}</p>
+            </div>
+            <button onClick={runScan} disabled={running} className="btn btn-ghost" type="button">
+              {running ? "再実行中..." : "再実行"}
+            </button>
+          </div>
         </div>
       )}
 
@@ -112,25 +121,39 @@ export default function DashboardPage() {
 
       {/* Default stats when no scan */}
       {!result && (
-        <div className="grid-stats" style={{ marginBottom: 14 }}>
-          {[
-            { label: "地合い", value: "--", sub: "市場強度はスキャン後に表示", clr: "var(--color-muted-clay)", icon: Gauge },
-            { label: "シグナル", value: "--", sub: "候補銘柄の数と質を判定", clr: "var(--color-muted-clay)", icon: Target },
-            { label: "ポジション", value: "0", sub: "保有中の銘柄", clr: "var(--color-espresso-ink)", icon: ChartNoAxesCombined },
-            { label: "キルスイッチ", value: "正常", sub: "連敗・日次損失を監視", clr: "var(--color-signal-green)", icon: ShieldCheck },
-          ].map((s, i) => (
-            <div key={i} className="card metric-card animate-fade-in" style={{ animationDelay: `${i * 50}ms` }}>
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
-                <div>
-                  <div className="stat-label">{s.label}</div>
-                  <div className="stat-value stat-value-sm" style={{ color: s.clr }}>{s.value}</div>
-                  <div className="stat-sub">{s.sub}</div>
+        <>
+          <div className="grid-stats" style={{ marginBottom: 14 }}>
+            {[
+              { label: "地合い", value: "--", sub: "市場強度はスキャン後に表示", clr: "var(--color-muted-clay)", icon: Gauge },
+              { label: "シグナル", value: "--", sub: "候補銘柄の数と質を判定", clr: "var(--color-muted-clay)", icon: Target },
+              { label: "ポジション", value: "0", sub: "保有中の銘柄", clr: "var(--color-espresso-ink)", icon: ChartNoAxesCombined },
+              { label: "キルスイッチ", value: "正常", sub: "連敗・日次損失を監視", clr: "var(--color-signal-green)", icon: ShieldCheck },
+            ].map((s, i) => (
+              <div key={i} className="card metric-card animate-fade-in" style={{ animationDelay: `${i * 50}ms` }}>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+                  <div>
+                    <div className="stat-label">{s.label}</div>
+                    <div className="stat-value stat-value-sm" style={{ color: s.clr }}>{s.value}</div>
+                    <div className="stat-sub">{s.sub}</div>
+                  </div>
+                  <span className="semantic-icon"><s.icon size={18} /></span>
                 </div>
-                <span className="semantic-icon"><s.icon size={18} /></span>
               </div>
+            ))}
+          </div>
+          <div className="card dashboard-next-actions" style={{ marginBottom: 14 }}>
+            <div>
+              <div className="stat-label">次の操作</div>
+              <div className="dashboard-next-title">日次スキャン前でも確認できる画面</div>
+              <p className="meaning-note">企業検索と業界地図はモック/DBデータで先に確認できます。スキャン後は候補銘柄へ進みます。</p>
             </div>
-          ))}
-        </div>
+            <div className="dashboard-next-links">
+              <Link href="/companies" className="btn btn-ghost no-underline">企業検索</Link>
+              <Link href="/industries" className="btn btn-ghost no-underline">業界地図</Link>
+              <Link href="/settings" className="btn btn-ghost no-underline">設定確認</Link>
+            </div>
+          </div>
+        </>
       )}
 
       {/* Module status */}

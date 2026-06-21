@@ -11,10 +11,14 @@ import type { AnalysisSubject } from "../analysis";
 import {
   getForbiddenSymbols, getActiveEvents,
   insertMarketSnapshots, insertLayerConditions, insertSignal, insertTradeScenario,
-  insertLlmRun,
+  insertLlmRun, insertAnalysisRun, insertScoreSnapshot,
+  getLatestStorylineSet, insertStorylineSet, insertStorylineScenarios,
 } from "../supabase/repository";
 import { NotificationEngine } from "../notifications/engine";
 import type { MorningBriefData } from "../notifications/types";
+import { getLlmRuntimeConfig } from "../llm/settings";
+import { generateStorylineSet } from "../storylines";
+import type { PreviousStorylineSet, StorylineSet } from "../storylines";
 
 export interface DailyScanOptions {
   symbols: Symbol[];
@@ -29,6 +33,10 @@ export interface DailyScanOptions {
   enableNotifications?: boolean;
   /** Persist results to DB. */
   persistToDb?: boolean;
+  /** Generate best/base/conservative/worst storylines for the top filtered symbols. */
+  enableStorylines?: boolean;
+  /** Number of non-avoid symbols to simulate storylines for. */
+  storylineTopN?: number;
 }
 
 const DEFAULT_LOOKBACK = 260;
@@ -44,6 +52,8 @@ export async function runDailyScan(options: DailyScanOptions): Promise<DailyScan
   const persist = options.persistToDb ?? false;
   const notify = options.enableNotifications ?? false;
   const llmTopN = options.llmTopN ?? 3;
+  const enableStorylines = options.enableStorylines ?? true;
+  const storylineTopN = options.storylineTopN ?? 10;
 
   const adapter = new YFinanceAdapter();
   const symbols = options.symbols;
@@ -78,7 +88,7 @@ export async function runDailyScan(options: DailyScanOptions): Promise<DailyScan
   // =========================================
   const allTickers = [...symbols.map((s) => s.symbol), ...benchmarkSymbols];
   const { bars, errors: fetchErrors } = await adapter.fetchDailyBars(allTickers, from, scanDate);
-  for (const e of fetchErrors) errors.push(`OHLCV: ${e.symbol} — ${e.message}`);
+  for (const e of fetchErrors) errors.push(`OHLCV: ${e.symbol} - ${e.message}`);
 
   const barsBySymbol = new Map<string, IndicatorInput[]>();
   for (const bar of bars) {
@@ -161,7 +171,21 @@ export async function runDailyScan(options: DailyScanOptions): Promise<DailyScan
   // =========================================
   const scoredSymbols: ScoredSymbol[] = [];
   const analysisEngine = new InvestmentAnalysisEngine();
-  const llmAnalysisEngine = new InvestmentAnalysisEngine({ llm: { enabled: true } });
+  let llmAnalysisEngine = new InvestmentAnalysisEngine({ llm: { enabled: true } });
+  let llmRuntimeMetadata: Record<string, unknown> = {};
+  try {
+    const runtime = await getLlmRuntimeConfig();
+    llmAnalysisEngine = new InvestmentAnalysisEngine({ llm: { enabled: true, provider: runtime.provider, ...runtime.config } });
+    llmRuntimeMetadata = {
+      provider: runtime.settings.provider,
+      reasoningModel: runtime.settings.reasoningModel,
+      workerModel: runtime.settings.workerModel,
+      criticModel: runtime.settings.criticModel,
+      source: runtime.settings.source,
+    };
+  } catch (e) {
+    errors.push(`LLM settings load failed: ${e instanceof Error ? e.message : "Unknown"}`);
+  }
 
   for (const sym of symbols) {
     const snapshot = snapshots[sym.symbol];
@@ -204,7 +228,7 @@ export async function runDailyScan(options: DailyScanOptions): Promise<DailyScan
         if (persist) {
           try {
             await insertLlmRun({ task_type: "reasoning", run_role: "reasoning", status: llmResult.llm.reasoning.status, input_snapshot_json: llmInput as never, output_json: llmResult.llm.analysis as never, input_tokens: llmResult.llm.reasoning.inputTokens, output_tokens: llmResult.llm.reasoning.outputTokens, estimated_cost: llmResult.llm.reasoning.estimatedCost, latency_ms: llmResult.llm.reasoning.latencyMs, error_message: llmResult.llm.reasoning.errorMessage ?? null });
-            // insertSignal would need to come before this — deferred to persist block below
+            // insertSignal would need to come before this - deferred to persist block below
           } catch {}
         }
       }
@@ -214,9 +238,44 @@ export async function runDailyScan(options: DailyScanOptions): Promise<DailyScan
   }
 
   // =========================================
-  // 7. Persist to DB
+  // 7. Storyline Simulation
+  // =========================================
+  const storylineSets: StorylineSet[] = [];
+  if (enableStorylines) {
+    const storylineCandidates = [...strongSignals, ...entryCandidates, ...watchList].slice(0, storylineTopN);
+    for (const sc of storylineCandidates) {
+      try {
+        const previous = persist ? await loadPreviousStoryline(sc.symbol.symbol) : null;
+        storylineSets.push(generateStorylineSet({
+          scored: sc,
+          dataConfidence: dataConfidence[sc.symbol.symbol] ?? 50,
+          generatedAt: capturedAt,
+          previous,
+        }));
+      } catch (e) {
+        errors.push(`Storyline generation failed for ${sc.symbol.symbol}: ${e instanceof Error ? e.message : "Unknown"}`);
+      }
+    }
+  }
+
+  // =========================================
+  // 8. Persist to DB
   // =========================================
   if (persist) {
+    let analysisRunId: string | null = null;
+    try {
+      const analysisRun = await insertAnalysisRun({
+        run_type: "daily_scan",
+        run_key: dateStr,
+        status: "completed",
+        started_at: startedAt,
+        finished_at: new Date().toISOString(),
+        config_json: { llmTopN, lookbackDays, benchmarks: benchmarkSymbols, llm: llmRuntimeMetadata, enableStorylines, storylineTopN } as never,
+        metadata_json: { symbolCount: symbols.length, strongCount: strongSignals.length, entryCount: entryCandidates.length, watchCount: watchList.length, avoidedCount: avoided.length, storylineCount: storylineSets.length } as never,
+      });
+      analysisRunId = analysisRun.id;
+    } catch (e) { errors.push(`Analysis run persist: ${e instanceof Error ? e.message : "Unknown"}`); }
+
     try { await insertMarketSnapshots(marketSnapshotRows); } catch (e) { errors.push(`Market snapshots persist: ${e instanceof Error ? e.message : "Unknown"}`); }
     try { await insertLayerConditions(layerConditionRows); } catch (e) { errors.push(`Layer conditions persist: ${e instanceof Error ? e.message : "Unknown"}`); }
 
@@ -239,12 +298,68 @@ export async function runDailyScan(options: DailyScanOptions): Promise<DailyScan
             await insertTradeScenario({ signal_id: sig.id, entry_price: sc.classification.scenario.entryPrice, stop_price: sc.classification.scenario.stopPrice, target_base: sc.classification.scenario.targetBase, risk_reward_base: sc.classification.scenario.riskRewardBase });
           } catch {}
         }
+        try {
+          await insertScoreSnapshot({
+            analysis_run_id: analysisRunId,
+            signal_id: sig.id,
+            symbol_id: sc.symbol.id,
+            symbol: sc.symbol.symbol,
+            captured_at: capturedAt,
+            action_suggestion: sc.classification.action,
+            tier: sc.classification.tier,
+            opportunity_score: sc.scores.opportunityScore,
+            entry_timing_score: sc.scores.entryTimingScore,
+            risk_score: sc.scores.riskScore,
+            conviction_score: sc.scores.convictionScore,
+            final_entry_score: sc.scores.finalEntryScore,
+            data_confidence: dataConfidence[sc.symbol.symbol] ?? 50,
+            score_breakdown_json: sc.scores.breakdown as never,
+            score_contributions_json: sc.scores.contributions as never,
+            gate_details_json: sc.classification.gateDetails as never,
+            decision_reasons_json: sc.classification.reasons as never,
+            strategy_tags_json: sc.scores.strategyTags,
+            strategy_fit_scores_json: sc.scores.strategyFitScores,
+            input_snapshot_json: { snapshot: sc.snapshot, layer: sc.layer, scenario: sc.classification.scenario } as never,
+          });
+        } catch (e) { errors.push(`Score snapshot persist ${sc.symbol.symbol}: ${e instanceof Error ? e.message : "Unknown"}`); }
       } catch (e) { errors.push(`Signal persist ${sc.symbol.symbol}: ${e instanceof Error ? e.message : "Unknown"}`); }
+    }
+
+    for (const storyline of storylineSets) {
+      const symbolRow = symbols.find((s) => s.symbol === storyline.symbol);
+      try {
+        const set = await insertStorylineSet({
+          analysis_run_id: analysisRunId,
+          symbol_id: symbolRow?.id ?? null,
+          symbol: storyline.symbol,
+          generated_at: storyline.generatedAt,
+          status: storyline.status,
+          active_scenario: storyline.activeScenario,
+          revision_summary: storyline.revisionSummary,
+          revision_reasons_json: storyline.revisionReasons as never,
+          score_snapshot_json: storyline.scoreSnapshot as never,
+        });
+        await insertStorylineScenarios(storyline.scenarios.map((scenario) => ({
+          storyline_set_id: set.id,
+          scenario_kind: scenario.kind,
+          label: scenario.label,
+          probability_pct: scenario.probabilityPct,
+          horizon: scenario.horizon,
+          thesis: scenario.thesis,
+          expected_return_pct: scenario.expectedReturnPct,
+          target_price: scenario.targetPrice,
+          stop_price: scenario.stopPrice,
+          key_drivers_json: scenario.keyDrivers as never,
+          confirmation_signals_json: scenario.confirmationSignals as never,
+          invalidation_signals_json: scenario.invalidationSignals as never,
+          risk_notes_json: scenario.riskNotes as never,
+        })));
+      } catch (e) { errors.push(`Storyline persist ${storyline.symbol}: ${e instanceof Error ? e.message : "Unknown"}`); }
     }
   }
 
   // =========================================
-  // 8. LINE Notification
+  // 9. LINE Notification
   // =========================================
   if (notify) {
     try {
@@ -278,9 +393,28 @@ export async function runDailyScan(options: DailyScanOptions): Promise<DailyScan
   const finishedAt = new Date().toISOString();
   return {
     context: { date: dateStr, symbols, snapshots, benchmarkSnapshots, sectors, themes, layerResults, dataConfidence },
-    scoredSymbols, strongSignals, entryCandidates, watchList, avoided,
+    scoredSymbols, strongSignals, entryCandidates, watchList, avoided, storylineSets,
     totalCostUsd, errors, startedAt, finishedAt,
   };
+
+  async function loadPreviousStoryline(symbol: string): Promise<PreviousStorylineSet | null> {
+    try {
+      const latest = await getLatestStorylineSet(symbol);
+      if (!latest) return null;
+      const scoreSnapshot = latest.score_snapshot_json as { finalEntryScore?: number; riskScore?: number; entryTimingScore?: number };
+      return {
+        symbol: latest.symbol,
+        activeScenario: latest.active_scenario as PreviousStorylineSet["activeScenario"],
+        finalEntryScore: Number(scoreSnapshot.finalEntryScore ?? 0),
+        riskScore: Number(scoreSnapshot.riskScore ?? 0),
+        entryTimingScore: Number(scoreSnapshot.entryTimingScore ?? 0),
+        generatedAt: latest.generated_at,
+      };
+    } catch (e) {
+      errors.push(`Previous storyline load failed for ${symbol}: ${e instanceof Error ? e.message : "Unknown"}`);
+      return null;
+    }
+  }
 
   function buildAnalysisSubject(sym: Symbol, snapshot: SymbolSnapshot): AnalysisSubject {
     const sectorName = symbolSectorMap.get(sym.symbol);

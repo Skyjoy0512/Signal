@@ -6,10 +6,19 @@ import { buildReasoningPrompt, buildCriticPrompt, buildRepairPrompt } from "./pr
 export interface OrchestratorConfig {
   enableCritic?: boolean; maxRepairAttempts?: number;
   reasoningModel?: string; workerModel?: string;
+  criticModel?: string;
   reasoningTemperature?: number; criticTemperature?: number;
 }
 
-const DEFAULTS = { enableCritic: false, maxRepairAttempts: 2, reasoningModel: "deepseek-chat", workerModel: "deepseek-chat", reasoningTemperature: 0.3, criticTemperature: 0.5 };
+const DEFAULTS = {
+  enableCritic: false,
+  maxRepairAttempts: 2,
+  reasoningModel: process.env.LLM_REASONING_MODEL ?? process.env.LLM_MODEL ?? "deepseek-chat",
+  workerModel: process.env.LLM_WORKER_MODEL ?? process.env.LLM_MODEL ?? "deepseek-chat",
+  criticModel: process.env.LLM_CRITIC_MODEL ?? process.env.LLM_REASONING_MODEL ?? process.env.LLM_MODEL ?? "deepseek-chat",
+  reasoningTemperature: Number(process.env.LLM_REASONING_TEMPERATURE ?? 0.3),
+  criticTemperature: Number(process.env.LLM_CRITIC_TEMPERATURE ?? 0.5),
+};
 
 function empty(status: LlmRunResult["status"] = "pending"): LlmRunResult {
   return { status, outputJson: null, outputText: null, inputTokens: 0, outputTokens: 0, estimatedCost: 0, latencyMs: 0, errorMessage: null };
@@ -72,7 +81,7 @@ export class LlmOrchestrator {
   private async runCritic(reasoning: ReasoningOutput, input: LlmInputSnapshot): Promise<LlmRunResult> {
     try {
       const prompt = buildCriticPrompt(reasoning, input);
-      const r = await this.provider.chatCompletion({ model: this.config.reasoningModel, messages: [{ role: "system", content: "Critical reviewer." }, { role: "user", content: prompt }], temperature: this.config.criticTemperature, maxTokens: 2048, responseFormat: { type: "json_object" } });
+      const r = await this.provider.chatCompletion({ model: this.config.criticModel, messages: [{ role: "system", content: "Critical reviewer." }, { role: "user", content: prompt }], temperature: this.config.criticTemperature, maxTokens: 2048, responseFormat: { type: "json_object" } });
       const parsed = extractJson(r.content);
       if (parsed === null) return { ...empty("failed"), errorMessage: "Failed to parse critic" };
       const ve = validateSchema(parsed, CRITIC_SCHEMA);

@@ -3,7 +3,7 @@
 import type { CSSProperties } from "react";
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Brain, Database, Filter, Save } from "lucide-react";
+import { Brain, Database, Filter, RotateCcw, Save } from "lucide-react";
 import type { EnrichedCompany, IndustrySummary } from "@/lib/fundamentals/provider";
 import { Button } from "@/components/ui/button";
 import { StatusPill } from "@/components/visual-primitives";
@@ -40,6 +40,21 @@ export default function ScreeningPage() {
     if (company.metrics.per > maxPer) return false;
     return true;
   });
+  const loading = sourceLabel === "読み込み中";
+  const activeFilters = [
+    industry !== "ALL" ? `業種: ${industries.find((row) => row.code === industry)?.name ?? industry}` : null,
+    minRevenue > 0 ? `売上 >= ${minRevenue.toLocaleString()}` : null,
+    minMargin > 0 ? `営業利益率 >= ${minMargin}%` : null,
+    minRoe > 0 ? `ROE >= ${minRoe}%` : null,
+    maxPer < 50 ? `PER <= ${maxPer}倍` : null,
+  ].filter(Boolean) as string[];
+  const resetFilters = () => {
+    setIndustry("ALL");
+    setMinRevenue(0);
+    setMinMargin(0);
+    setMinRoe(0);
+    setMaxPer(50);
+  };
 
   return (
     <div className="page-container">
@@ -67,7 +82,29 @@ export default function ScreeningPage() {
         />
       </div>
 
-      <div className="filter-shell">
+      {loading && (
+        <div className="card state-panel" style={{ marginBottom: 14 }}>
+          <div className="state-panel-head">
+            <div>
+              <div className="stat-label">Loading</div>
+              <div className="state-panel-title">条件検索データを読み込み中</div>
+              <p className="state-panel-copy">企業マスターと業界一覧を取得しています。</p>
+            </div>
+            <span className="badge badge-outline">読み込み中</span>
+          </div>
+          <div className="skeleton-grid">
+            {[0, 1, 2].map((item) => (
+              <div key={item} className="skeleton-card">
+                <div className="skeleton-line short" />
+                <div className="skeleton-line long" />
+                <div className="skeleton-line medium" />
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {!loading && <div className="filter-shell">
         <section className="card lane-card">
           <div className="lane-header">
             <div>
@@ -84,6 +121,7 @@ export default function ScreeningPage() {
           <div style={{ display: "flex", gap: 8, marginTop: 12, flexWrap: "wrap" }}>
             <Button variant="outline" size="sm"><Save size={14} />条件保存</Button>
             <Button variant="ghost" size="sm"><Filter size={14} />{filtered.length}件表示</Button>
+            <Button variant="ghost" size="sm" onClick={resetFilters}><RotateCcw size={14} />初期化</Button>
           </div>
         </section>
         <section className="card lane-card">
@@ -99,12 +137,28 @@ export default function ScreeningPage() {
           </div>
           <p className="meaning-note">ROEは質、PERは割高度の目安です。候補の深掘り順を作るための条件として扱います。</p>
         </section>
-      </div>
+      </div>}
 
-      <div className="card data-table">
+      {!loading && <div className="filter-summary">
+        <div>
+          <div className="stat-label">現在の条件</div>
+          <div className="filter-summary-copy">{activeFilters.length ? activeFilters.join(" / ") : "条件なし"}</div>
+        </div>
+        <span className="badge badge-outline">{filtered.length}件</span>
+      </div>}
+
+      {!loading && <div className="card data-table">
         <div className="company-table-head">
           {["企業", "業種", "売上", "ROE", "PER", "詳細"].map((label) => <div key={label} className="stat-label">{label}</div>)}
         </div>
+        {filtered.length === 0 && (
+          <div className="empty-state empty-state-compact">
+            <div>
+              <h2>条件に合う企業がありません</h2>
+              <p>売上・ROE・PERの条件を少し広げると候補を確認できます。</p>
+            </div>
+          </div>
+        )}
         {filtered.map((company) => (
           <div key={company.ticker} className="company-table-row">
             <div className="company-cell-main">
@@ -120,7 +174,7 @@ export default function ScreeningPage() {
             <div className="company-table-cell"><span className="company-table-label">詳細</span><Link className="link" href={`/companies/${encodeURIComponent(company.ticker)}`}>詳細</Link></div>
           </div>
         ))}
-      </div>
+      </div>}
     </div>
   );
 }

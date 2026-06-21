@@ -4,13 +4,14 @@ import { buildReasoningPrompt, buildCriticPrompt } from "./prompts";
 import type { LlmInputSnapshot, ReasoningOutput } from "./types";
 
 describe("REASONING_SCHEMA", () => {
-  const valid = JSON.parse('{"action_suggestion":"entry_candidate","confidence":72,"bull_case":"Good","bear_case":"Bad","key_risks":["Risk A"],"do_not_enter_if":["Cond X"],"invalidation_condition":"Below MA","target_review":{"conservative_target_is_reasonable":true,"base_target_is_reasonable":true,"bull_target_is_reasonable":false,"comment":"OK"},"stop_review":{"stop_is_reasonable":true,"comment":"OK"},"score_adjustments":{"opportunity":3,"entry_timing":-2,"risk":0,"conviction":5,"reason":"Slight adjust"},"final_comment":"OK"}');
+  const valid = JSON.parse('{"action_suggestion":"entry_candidate","confidence":72,"bull_case":"Good","bear_case":"Bad","key_risks":["Risk A"],"do_not_enter_if":["Cond X"],"invalidation_condition":"Below MA","target_review":{"conservative_target_is_reasonable":true,"base_target_is_reasonable":true,"bull_target_is_reasonable":false,"comment":"OK"},"stop_review":{"stop_is_reasonable":true,"comment":"OK"},"score_adjustments":{"opportunity":3,"entry_timing":-2,"risk":0,"conviction":5,"reason":"Slight adjust"},"final_comment":"OK"}') as ReasoningOutput;
   
   it("passes valid output", () => {
     expect(validateSchema(valid, REASONING_SCHEMA)).toBeNull();
   });
   it("detects missing required keys", () => {
-    const b = { ...valid }; delete (b as any).bull_case;
+    const b: Partial<ReasoningOutput> = { ...valid };
+    delete b.bull_case;
     expect(validateSchema(b, REASONING_SCHEMA)).not.toBeNull();
   });
   it("detects score_adjustments out of range", () => {

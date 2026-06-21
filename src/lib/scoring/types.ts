@@ -19,14 +19,31 @@ export interface ScoringOutput {
   opportunityScore: number; entryTimingScore: number; riskScore: number; convictionScore: number;
   finalEntryScore: number; strategyFitScores: StrategyFitScores; strategyTags: StrategyTag[];
   breakdown: ScoreBreakdown;
+  contributions: ScoreContributions;
 }
 
 export interface ScoreBreakdown {
   opportunity: { trend: number; volume: number; relativeStrength: number; theme: number; fundamental: number; catalyst: number; };
   entryTiming: { setup: number; rsiPosition: number; atrPosition: number; supportResistance: number; priceAction: number; };
-  risk: { volatility: number; liquidity: number; event: number; market: number; sector: number; data: number; };
+  risk: { volatility: number; liquidity: number; event: number; market: number; sector: number; data: number; overheating: number; trendBreakdown: number; valuation: number; breakoutFailure: number; };
   conviction: { dataConfidence: number; multiLayerAlignment: number; technicalConfirmation: number; fundamentalConfirmation: number; llmConfidence: number; };
 }
+
+export type ScoreComponent = "opportunity" | "entryTiming" | "risk" | "conviction" | "finalEntry";
+export type ContributionPolarity = "positive" | "negative" | "neutral";
+
+export interface ScoreContribution {
+  component: ScoreComponent;
+  feature: string;
+  label: string;
+  rawScore: number;
+  weight: number;
+  contribution: number;
+  polarity: ContributionPolarity;
+  reason: string;
+}
+
+export type ScoreContributions = Record<ScoreComponent, ScoreContribution[]>;
 
 export interface SignalClassification {
   action: "strong_entry_candidate" | "entry_candidate" | "watch" | "avoid";
@@ -34,7 +51,25 @@ export interface SignalClassification {
   tierReason: string;
   blockerReason?: string;
   gates: Record<string, boolean>;
+  gateDetails: SignalGateDetail[];
+  reasons: SignalDecisionReason[];
   scenario: TradeScenario | null;
+}
+
+export interface SignalGateDetail {
+  key: string;
+  label: string;
+  passed: boolean;
+  actual: number | boolean | null;
+  threshold: number | boolean;
+  severity: "blocker" | "warning" | "info";
+  reason: string;
+}
+
+export interface SignalDecisionReason {
+  code: string;
+  message: string;
+  severity: "blocker" | "warning" | "info";
 }
 
 export interface TradeScenario {

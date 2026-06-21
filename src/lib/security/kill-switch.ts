@@ -1,5 +1,5 @@
 /**
- * Signal Kill Switch — risk management safety net.
+ * Signal Kill Switch - risk management safety net.
  *
  * Rules:
  * - 3 consecutive losses → propose "No New Entry"

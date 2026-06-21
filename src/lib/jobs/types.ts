@@ -1,6 +1,7 @@
 import type { Symbol } from "../supabase/types";
 import type { LayerCondition, SymbolSnapshot } from "../intelligence/types";
 import type { ScoringOutput, SignalClassification } from "../scoring/types";
+import type { StorylineSet } from "../storylines/types";
 
 export type JobStatus = "running" | "completed" | "failed";
 
@@ -35,6 +36,7 @@ export interface DailyScanResult {
   entryCandidates: ScoredSymbol[];
   watchList: ScoredSymbol[];
   avoided: ScoredSymbol[];
+  storylineSets: StorylineSet[];
   totalCostUsd: number;
   errors: string[];
   startedAt: string;

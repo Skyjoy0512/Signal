@@ -13,10 +13,11 @@ export async function POST() {
         entry: result.entryCandidates.length,
         watch: result.watchList.length,
         avoided: result.avoided.length,
+        storylines: result.storylineSets.length,
       },
       errors: result.errors,
     });
-  } catch (error) {
+  } catch {
     return NextResponse.json({ error: "Scan failed" }, { status: 500 });
   }
 }
