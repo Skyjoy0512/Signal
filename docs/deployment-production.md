@@ -21,6 +21,7 @@ This runbook covers hosted Supabase plus Vercel-style Next.js hosting.
 - Supabase URL/API keys are stored in the Vercel project for Production, Preview, and Development.
 - Required non-Supabase Vercel environment variables are stored in the Vercel project for Production, Preview, and Development.
 - Google Auth requires `SIGNAL_AUTH_ALLOWED_EMAILS` in production; without it, Google sessions fail closed.
+- App-side Google OAuth is deployed, but Supabase Google Provider still needs a Google OAuth client ID/secret before real Google sign-in can complete.
 - A local ignored `.env.local` contains the generated Vercel admin/seed/encryption values for operator smoke tests.
 - Vercel SSO deployment protection was disabled for public smoke testing.
 - Production API `GET /api/fundamentals` returns `source: "supabase-fundamentals"` after seed/import.
