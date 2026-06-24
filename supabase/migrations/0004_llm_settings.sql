@@ -21,6 +21,8 @@ create table if not exists public.llm_settings (
 
 alter table public.llm_settings enable row level security;
 
+grant select, insert, update, delete on table public.llm_settings to service_role;
+
 do $$
 begin
   if not exists (
@@ -32,7 +34,8 @@ begin
     create policy llm_settings_service_role_all
       on public.llm_settings
       for all
-      using (auth.role() = 'service_role')
-      with check (auth.role() = 'service_role');
+      to service_role
+      using (true)
+      with check (true);
   end if;
 end $$;

@@ -23,11 +23,11 @@ export function buildMorningBrief(data: MorningBriefData): string {
 
   // Strong signals
   if (data.strongSignals.length > 0) {
-    lines.push("🔥 Strong Entry Candidates");
+    lines.push("最優先レビュー候補");
     for (const s of data.strongSignals.slice(0, 3)) {
       const tierIcon = s.tier === "S" ? "⭐" : s.tier === "A" ? "🔶" : "🔹";
       lines.push(`${tierIcon} ${s.name} (${s.symbol}) [${s.tier}]`);
-      lines.push(`   Entry: ${s.entryPrice.toLocaleString()} | Target: ${s.targetBase.toLocaleString()} | Stop: ${s.stopPrice.toLocaleString()}`);
+      lines.push(`   想定水準: ${s.entryPrice.toLocaleString()} | 参考ターゲット: ${s.targetBase.toLocaleString()} | 無効化ライン: ${s.stopPrice.toLocaleString()}`);
       lines.push(`   RR: ${s.rr.toFixed(1)} | ${s.keyReason}`);
     }
     if (data.strongSignals.length > 3) {
@@ -38,9 +38,9 @@ export function buildMorningBrief(data: MorningBriefData): string {
 
   // Entry candidates
   if (data.entryCandidates.length > 0) {
-    lines.push(`📊 Entry Candidates (${data.entryCandidates.length}件)`);
+    lines.push(`追加確認候補 (${data.entryCandidates.length}件)`);
     for (const c of data.entryCandidates.slice(0, 5)) {
-      lines.push(`・${c.name} (${c.symbol}) [${c.tier}] Entry: ${c.entryPrice.toLocaleString()} RR: ${c.rr.toFixed(1)}`);
+      lines.push(`・${c.name} (${c.symbol}) [${c.tier}] 想定水準: ${c.entryPrice.toLocaleString()} RR: ${c.rr.toFixed(1)}`);
     }
     if (data.entryCandidates.length > 5) {
       lines.push(`   ...他 ${data.entryCandidates.length - 5} 件`);
@@ -73,14 +73,14 @@ export function buildInstantAlert(data: InstantAlertData): string {
   const tierIcon = data.tier === "S" ? "⭐" : data.tier === "A" ? "🔶" : "🔹";
 
   const actionLabel =
-    data.action === "strong_entry_candidate" ? "Strong Entry" :
-    data.action === "entry_candidate" ? "Entry Candidate" :
+    data.action === "strong_entry_candidate" ? "最優先レビュー候補" :
+    data.action === "entry_candidate" ? "追加確認候補" :
     data.action === "watch" ? "Watch" : "Avoid";
 
   lines.push(`${tierIcon} Signal ${actionLabel}`);
   lines.push("");
   lines.push(`銘柄: ${data.name} (${data.symbol})`);
-  lines.push(`Entry: ${data.entryPrice.toLocaleString()} | Target: ${data.targetBase.toLocaleString()} | Stop: ${data.stopPrice.toLocaleString()}`);
+  lines.push(`想定水準: ${data.entryPrice.toLocaleString()} | 参考ターゲット: ${data.targetBase.toLocaleString()} | 無効化ライン: ${data.stopPrice.toLocaleString()}`);
   lines.push(`RR: ${data.rr.toFixed(1)} | Score: ${data.opportunityScore}`);
   lines.push("");
   lines.push(`理由: ${data.reason}`);
@@ -94,7 +94,7 @@ export function buildInstantAlert(data: InstantAlertData): string {
 export function buildWebhookReply(action: string, symbol: string, tier: string): string {
   switch (action) {
     case "entered":
-      return `✅ ${symbol} [${tier}] Entryを記録しました。`;
+      return `✅ ${symbol} [${tier}] 判断記録を保存しました。`;
     case "passed":
       return `⏭️ ${symbol} [${tier}] 見送りました。`;
     case "deferred":

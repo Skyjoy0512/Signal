@@ -1,0 +1,170 @@
+02 High Priority Findings
+=========================
+
+HP-1: finalEntryScore が構造的に上振れしている
+------------------------------------------------
+
+対象ファイル:
+- src/lib/scoring/scoring-engine.ts
+- src/lib/scoring/scoring.test.ts
+
+問題:
+finalEntryScoreの算出式が symbolScore * 0.50 + 50 + market/sector adjustment に近い形になっている。
+
+symbolScoreはすでに opportunity, entryTiming, 100-risk, conviction を合成した0-100の総合スコアであるため、さらに50点ベースを加えると中立銘柄が高スコア化する。
+
+例:
+- symbolScore = 30 -> final 65近辺
+- symbolScore = 50 -> final 75近辺
+- symbolScore = 70 -> final 85近辺
+
+これにより、SIGNAL_THRESHOLDS.finalEntryMinimum = 70 や finalStrongMinimum = 80 の意味が壊れる。
+
+なぜ重大か:
+- 候補銘柄が過剰に強く見える。
+- UIの「候補度」が過信される。
+- LLMレビューの入力も上振れする。
+- ストーリーラインが楽観寄りになる。
+- outcome評価を後でしても、基礎scoreが歪んでいるため分析しづらい。
+
+修正方針:
+computeFinalEntryScoreUncapped を以下方針にする。
+
+  final = clamp(symbolScore + marketAdjustment + sectorAdjustment)
+
+marketAdjustment / sectorAdjustment は補正として扱い、50点ベース加算は削除する。
+
+受け入れ条件:
+- 中立入力でfinalEntryScoreが45-55に収まる。
+- 弱い銘柄が70以上に上がらない。
+- 強い銘柄だけが70以上になる。
+- final score capsは維持される。
+
+
+HP-2: LLM補正後の最終スコアが安全capを一部迂回している
+------------------------------------------------------
+
+対象ファイル:
+- src/lib/scoring/scoring-engine.ts
+- src/lib/analysis/llm-enhancer.ts
+
+問題:
+applyLlmAdjustment が LLM補正後の最終スコアを再計算するとき、riskOnlyFinalCap のみを使っている。
+
+そのため、以下のcapが補正後に完全再適用されない可能性がある。
+- dataConfidence < 60
+- eventBlockerActive
+- bearish market
+- isForbidden
+
+なぜ重大か:
+LLMは将来より強いモデルへ差し替える想定だが、どれだけ強いLLMでもhard blockerやdata confidence capを突破してはいけない。
+
+LLMはレビューや反証には使うが、最終的な安全柵はルールベースで固定すべき。
+
+修正方針:
+applyLlmAdjustment のsignatureを変更する。
+
+  applyLlmAdjustment(scores, adj, input)
+
+LLM補正後のfinalEntryScoreは以下で再計算する。
+
+  computeFinalEntryScore(symbolScore, input, u.riskScore)
+
+riskOnlyFinalCapは削除または共通cap関数へ統合する。
+
+受け入れ条件:
+- low data時、LLM最大加点後もlowDataConfidence cap以下。
+- event blocker時、LLM最大加点後もeventBlocker cap以下。
+- bearish market時、LLM最大加点後もbearishMarket cap以下。
+- forbidden時、LLM最大加点後もforbidden cap以下。
+
+
+HP-3: ChartContainerの設計が直近差分説明と一致していない
+--------------------------------------------------------
+
+対象ファイル:
+- src/components/ui/chart.tsx
+- src/components/candidate-visuals.tsx
+- src/components/fundamental-visuals.tsx
+
+問題:
+直近差分では「ResponsiveContainerを使わず、ChartContainerでResizeObserverにより実測width/heightを子チャートに渡す」と説明されている。
+
+しかし現行実装では、ChartContainerはready判定にResizeObserverを使うだけで、width/heightを子に渡していない。
+また candidate-visuals.tsx と fundamental-visuals.tsx に ResponsiveContainer が残っている。
+
+なぜ重大か:
+- ChartContainerとResponsiveContainerの責務が重複する。
+- 0幅/0高さ、hydration、タブ表示切替、resize時の不具合調査が難しくなる。
+- チャート表示は投資分析UIの信頼性に直結する。
+
+修正方針:
+どちらかに統一する。
+
+推奨A:
+ChartContainerをrender-props化し、children({ width, height })で実測値を渡す。ResponsiveContainerは完全削除。
+
+代替B:
+ResponsiveContainerを維持し、ChartContainerは単なるwrapperにする。ResizeObserverは使わない。
+
+受け入れ条件:
+- 設計がどちらか一方に統一されている。
+- ResponsiveContainer廃止方針ならimportが0件。
+- ResizeObserver mockテストがある。
+
+
+HP-4: API routesの認可・入力検証・secret保護が弱い
+------------------------------------------------
+
+対象ファイル:
+- src/app/api/settings/llm/route.ts
+- src/app/api/settings/llm/test/route.ts
+- src/app/api/jobs/daily-scan/route.ts
+- src/app/api/external-pack/route.ts
+- src/lib/supabase/server.ts
+- src/lib/llm/settings.ts
+
+問題:
+LLM設定保存、LLM疎通テスト、daily scan、external pack生成など、外部から叩かれると困るrouteに明示的な認可が不足している。
+
+Supabaseはservice_role前提のRLS設計であるため、Next.js API routeが実質的なセキュリティ境界になる。
+
+修正方針:
+- requireAdminRequest(req) を追加する。
+- APP_ADMIN_TOKENで簡易保護する。
+- 本番ではAPP_ADMIN_TOKEN必須にする。
+- settings input validationを強化する。
+- baseUrlはhttps必須、localhost/private IP禁止にする。
+
+受け入れ条件:
+- tokenなしPOSTは401。
+- tokenありPOSTは成功。
+- invalid provider/temperature/baseUrlは400。
+
+
+HP-5: ScoreContributionのnegative理由抽出が寄与度の意味とずれている
+-------------------------------------------------------------------
+
+対象ファイル:
+- src/lib/scoring/types.ts
+- src/lib/scoring/scoring-engine.ts
+- src/lib/scoring/signal-detector.ts
+
+問題:
+ScoreContribution.contribution は現在「加重された正の寄与量」に近い。
+しかし signal-detector では polarity === negative の寄与を集めて弱点理由として扱っている。
+
+risk系など highIsGood=false のfeatureでは、raw scoreが高いほど悪いが、contributionは正の値になる。
+
+修正方針:
+ScoreContributionに以下を追加する。
+
+  signedImpact: number
+  impactMagnitude: number
+
+risk系やnegative polarityでは signedImpact を負にし、弱点抽出は impactMagnitude でsortする。
+
+受け入れ条件:
+- risk高のfeatureがweak reason上位に出る。
+- LLM inputにsignedImpactが含まれる。

@@ -1,0 +1,209 @@
+07 LLM Integration Improvements
+===============================
+
+基本方針
+--------
+
+SignalのLLM設計では、将来より強いフロンティアLLMにAPIを繋ぎ替えたとき、レビュー品質が上がる余地を残す。
+
+ただし、LLMをスコア決定の最終権限にしない。
+
+LLMの役割:
+- 反証観点を出す。
+- bull/base/bearの論点整理をする。
+- riskを文章化する。
+- scenarioの違和感を指摘する。
+- data不足を指摘する。
+- score contributionsの矛盾を検出する。
+- 外部レビュー用packを整える。
+
+LLMに任せないもの:
+- hard blocker解除
+- final score cap解除
+- data confidence cap解除
+- event blocker解除
+- forbidden symbol解除
+- RR最低条件解除
+- threshold判定の最終決定
+
+
+LLM-1: LLM補正は非対称にする
+----------------------------
+
+現状の課題:
+score adjustmentが上下同程度に許可されると、LLMが楽観的にスコアを押し上げるリスクがある。
+
+改善案:
+- positive adjustment上限を小さくする。
+- negative adjustment上限はやや大きくする。
+
+例:
+  MAX_POSITIVE_ADJUSTMENT = 5
+  MAX_NEGATIVE_ADJUSTMENT = -10
+
+追加ルール:
+- low data時はpositive adjustment禁止。
+- event blocker時はpositive adjustment禁止。
+- RR不足時はpositive adjustment禁止。
+- criticがrequired_downgradeの場合はpositive adjustment禁止。
+- LLM confidenceが低い場合は数値補正を無視。
+
+
+LLM-2: LLM補正後のcapを完全再適用する
+-----------------------------------
+
+必須。
+applyLlmAdjustment(scores, adj, input)に変更し、LLM補正後も computeFinalEntryScore(symbolScore, input, riskScore) を使う。
+
+目的:
+LLMがどれだけ強くなっても、ルールベースの安全柵を突破させない。
+
+
+LLM-3: LLM入力snapshotをversion化する
+-----------------------------------
+
+追加するべき情報:
+- schemaVersion
+- scoreEngineVersion
+- scoringConfigVersion
+- capturedAt
+- marketDataAsOf
+- dataSources
+- featureAvailability
+- scenarioQuality
+- scoreContributions with signedImpact
+- gateDetails
+- decisionReasons
+- strategyTags
+- eventContext
+- fundamentalContext
+- technicalContext
+
+型案:
+
+  interface LlmInputSnapshotV1 {
+    schemaVersion: 'llm-input-v1';
+    symbol: string;
+    symbolName?: string;
+    capturedAt: string;
+    scoreEngineVersion: string;
+    scoringConfigVersion: string;
+    dataSources: DataSourceSummary[];
+    scores: ScoringOutput;
+    scoreContributions: ScoreContribution[];
+    gateDetails: GateDetails;
+    decisionReasons: DecisionReason[];
+    strategyTags: string[];
+    scenario: TradeScenario;
+    scenarioQuality: ScenarioQuality;
+    featureAvailability: Record<string, boolean>;
+    eventContext?: EventContext;
+    fundamentals?: FundamentalContext;
+    marketLayers: LayerContext;
+  }
+
+
+LLM-4: evidence_refsを出力schemaに追加する
+----------------------------------------
+
+目的:
+LLMの指摘がどの入力根拠に基づくか追跡できるようにする。
+
+例:
+
+  evidence_refs: [
+    { type: 'gate', key: 'riskGate' },
+    { type: 'contribution', component: 'risk', feature: 'overheating' },
+    { type: 'scenario', field: 'riskRewardBase' }
+  ]
+
+利用先:
+- UI tooltip
+- external pack
+- LLM run audit
+- hallucination検出
+
+
+LLM-5: Critic promptを強化する
+-----------------------------
+
+Criticに必ず確認させる項目:
+- dataConfidenceが低いのに楽観的でないか。
+- event blockerがあるのにentry寄りでないか。
+- riskGateが悪いのにfinalを上げていないか。
+- RR不足を無視していないか。
+- scenarioQualityが低いのにtargetを強く扱っていないか。
+- fundamentalとtechnicalが矛盾していないか。
+- 市場/セクターが弱いのに個別だけで過度に楽観視していないか。
+
+Critic出力:
+- required_downgrade: boolean
+- downgrade_to: optional signal tier
+- block_positive_adjustment: boolean
+- reasons: string[]
+- evidence_refs: EvidenceRef[]
+
+
+LLM-6: JSON schema validationを強化する
+-------------------------------------
+
+現状の軽量validatorでは不足する可能性がある。
+
+追加チェック:
+- additionalPropertiesを禁止またはwarning化。
+- 文字列最大長。
+- 配列最大件数。
+- score_adjustmentsの範囲。
+- confidenceとaction_suggestionの整合性。
+- required_downgrade=trueならdowngrade_to必須。
+- evidence_refsが存在しないcritical claimはwarning。
+
+
+LLM-7: LLM run logging拡張
+-------------------------
+
+追加保存項目:
+- provider
+- model
+- promptVersion
+- schemaVersion
+- temperature
+- maxTokens
+- repairAttemptCount
+- criticEnabled
+- finishReason
+- latencyMs
+- estimatedCostUsd
+- requestId
+- inputHash
+- outputHash
+
+注意:
+raw prompt/raw outputを保存する場合は、secretや個人メモが入らないようsanitizeする。
+
+
+LLM-8: provider差し替え容易性
+----------------------------
+
+src/lib/llm/providers.ts のprovider interfaceを維持しつつ、以下を明確化する。
+
+Provider責務:
+- API call
+- token usage extraction
+- raw text extraction
+- retryable error classification
+
+Orchestrator責務:
+- prompt composition
+- schema validation
+- repair
+- critic pass
+- run logging
+
+Analysis責務:
+- LLM input snapshot生成
+- adjustment sanitize
+- final cap適用
+- scoring output更新
+
+この分離により、DeepSeek、OpenAI互換、将来のfrontier modelを差し替えやすくする。

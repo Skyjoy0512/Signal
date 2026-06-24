@@ -1,0 +1,188 @@
+06 Analysis Logic Improvements
+==============================
+
+基本方針
+--------
+
+分析ロジックは、LLMに依存しないルールベースのdomain layerとして強化する。
+LLMはレビュー、批判、反証、追加確認観点の提示に使う。
+
+ルールベースで固定すべきもの:
+- final score caps
+- data confidence cap
+- event blocker
+- forbidden symbol
+- RR minimum
+- risk gate
+- missing data handling
+- score threshold
+
+LLMに任せてよいもの:
+- bull/bear case整理
+- risk narrative
+- storylineの違和感指摘
+- scenario target/stopの妥当性レビュー
+- 追加で見るべきデータの提案
+- contradiction detection
+
+
+すぐ実装
+--------
+
+1. finalEntryScore算出式の修正
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+最重要。
+中立銘柄が高score化しないよう、symbolScore + marketAdjustment + sectorAdjustmentへ変更する。
+
+2. 欠損特徴量の扱いを改善
+~~~~~~~~~~~~~~~~~~~~~~~
+
+問題:
+未取得featureが中立50点としてスコアに混入すると、実質的に欠損が候補度を押し上げたり下げたりする。
+
+改善案:
+FeatureScoreを導入する。
+
+  type FeatureScore = {
+    feature: string;
+    rawScore: number | null;
+    weight: number;
+    available: boolean;
+    missingReason?: string;
+  }
+
+計算方針:
+- available=true のfeatureだけでweightを再正規化する。
+- missing featureはdataConfidenceとfeatureAvailabilityに反映する。
+- UIとLLM inputにmissingReasonを渡す。
+
+3. atrPositionの命名見直し
+~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+問題:
+実ATRではなく短期リターンproxyが使われている場合、atrPositionという名前は誤解を招く。
+
+改善案:
+- actual ATRがある場合: atrPosition
+- proxyの場合: shortTermVolatilityProxy
+- scenarioQuality.atrSource = actual | estimated | unavailable を追加。
+
+4. TradeScenarioに品質情報を追加
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+追加型:
+
+  scenarioQuality: {
+    atrSource: 'actual' | 'estimated' | 'unavailable';
+    swingHighSource: 'actual' | 'missing';
+    swingLowSource: 'actual' | 'missing';
+    confidence: number;
+    warnings: string[];
+  }
+
+使い道:
+- UI tooltip
+- LLM input
+- score snapshot
+- external pack
+- review queue
+
+5. signal classification理由をUI表示用に整備
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+内部code:
+- finalEntryScoreGate
+- riskGate
+- rrGate
+- eventBlockerGate
+
+UI表示:
+- 候補度は高いがリスク確認が必要
+- RRが不足しているため追加確認扱い
+- 決算/イベント前後のため参考扱い
+- データ不足のため候補度は低信頼
+
+
+次に実装
+--------
+
+1. 日本株向け特徴量を追加
+~~~~~~~~~~~~~~~~~~~~~~~
+
+候補:
+- 売買代金
+- 流動性
+- 東証市場区分
+- 決算予定日
+- 配当落ち/権利落ち
+- ストップ高/ストップ安接近
+- TOPIX/Nikkei relative strength
+- 業種相対リターン
+- 信用残/貸借倍率
+- 小型株ボラティリティ補正
+
+2. セクター/テーマ評価を分布ベースにする
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+平均final scoreだけではなく、以下を計算する。
+- median final
+- top decile ratio
+- avoid ratio
+- risk median
+- signal breadth
+- sector relative momentum
+
+3. RR計算の過大評価を抑える
+~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+問題:
+古いswingHighや推定ATRを使うとRRが過大評価される可能性がある。
+
+改善案:
+- targetBaseがentry + 4ATRを超える場合、targetConfidenceを下げる。
+- swingHighが古い場合、scenarioQuality warningを出す。
+- target/stopのsourceを保存する。
+- RRが高くてもsource弱ならrrGateをwarningにする。
+
+4. Storyline probabilityを正規化
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Best/Base/Conservative/WorstのprobabilityPct合計を100にする。
+
+追加:
+- probabilityMethod
+- rawWeight
+- normalizedProbabilityPct
+
+
+後で検討
+--------
+
+1. outcome-based calibration
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+score_snapshotsと1W/1M/3M outcomeを比較し、スコア帯ごとの実績を見てcalibrationする。
+
+2. regime-aware scoring
+~~~~~~~~~~~~~~~~~~~~~~
+
+強気、弱気、レンジ相場でscore thresholdやweightを切り替える。
+
+3. portfolio-aware scoring
+~~~~~~~~~~~~~~~~~~~~~~~~~
+
+保有銘柄、セクター集中、現金比率、含み損益、既存risk exposureを考慮する。
+
+4. explainability強化
+~~~~~~~~~~~~~~~~~~~~
+
+finalEntryScoreの内訳を以下で表示する。
+- opportunity contribution
+- entryTiming contribution
+- inverse risk contribution
+- conviction contribution
+- market adjustment
+- sector adjustment
+- caps applied
+- LLM adjustment ignored/applied reason

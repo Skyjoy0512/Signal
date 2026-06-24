@@ -1,0 +1,25 @@
+{
+  "generatedAt": "2026-06-24T22:57:54.594Z",
+  "reviewDate": "2026-06-25",
+  "prompt": "docs/reviews/gpt-pro/2026-06-25-multidimensional-review-prompt.txt",
+  "outputTemplate": "docs/reviews/gpt-pro/2026-06-25-gpt-pro-review-output.md",
+  "implementationInstructionsTemplate": "docs/reviews/gpt-pro/2026-06-25-codex-implementation-instructions.md",
+  "zip": "docs/reviews/gpt-pro/signal-gpt-pro-review-pack-2026-06-25.zip",
+  "includedPaths": [
+    "docs/reviews/gpt-pro",
+    "docs/signal_review_docs",
+    "docs/data",
+    "docs/deployment-production.md",
+    ".github/workflows",
+    "package.json",
+    "scripts/bootstrap-hosting.mjs",
+    "scripts/check-production-env.mjs",
+    "scripts/check-supabase-hosted.mjs",
+    "scripts/create-review-pack.mjs",
+    "scripts/smoke-production.mjs",
+    "scripts/sync-vercel-supabase-env.mjs",
+    "scripts/verify-api.mjs",
+    "scripts/verify-db.mjs",
+    "scripts/verify-ui.mjs"
+  ]
+}

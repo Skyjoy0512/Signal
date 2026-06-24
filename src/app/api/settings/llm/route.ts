@@ -1,26 +1,33 @@
 import { NextResponse } from "next/server";
 import { getLlmSettingsView, saveLlmSettings, type LlmSettingsInput } from "@/lib/llm/settings";
+import { requireAdminRequest } from "@/lib/api/auth";
+import { errorResponse } from "@/lib/api/response";
 
-export async function GET() {
+export async function GET(request: Request) {
+  const unauthorized = requireAdminRequest(request);
+  if (unauthorized) return unauthorized;
   try {
     return NextResponse.json(await getLlmSettingsView());
   } catch (error) {
-    return NextResponse.json({ error: error instanceof Error ? error.message : "Failed to load LLM settings" }, { status: 500 });
+    return errorResponse("llm_settings_load_failed", error instanceof Error ? error.message : "Failed to load LLM settings", 500);
   }
 }
 
 export async function POST(request: Request) {
+  const unauthorized = requireAdminRequest(request);
+  if (unauthorized) return unauthorized;
   try {
     const body = await request.json();
     const input = normalizeInput(body);
     return NextResponse.json(await saveLlmSettings(input));
   } catch (error) {
-    return NextResponse.json({ error: error instanceof Error ? error.message : "Failed to save LLM settings" }, { status: 400 });
+    return errorResponse("llm_settings_invalid", error instanceof Error ? error.message : "Failed to save LLM settings", 400);
   }
 }
 
 function normalizeInput(body: Record<string, unknown>): LlmSettingsInput {
-  const provider = body.provider === "openai-compatible" ? "openai-compatible" : "deepseek";
+  if (body.provider !== "deepseek" && body.provider !== "openai-compatible") throw new Error("Invalid LLM provider");
+  const provider = body.provider;
   const reasoningModel = stringValue(body.reasoningModel);
   const workerModel = stringValue(body.workerModel);
   const criticModel = stringValue(body.criticModel);

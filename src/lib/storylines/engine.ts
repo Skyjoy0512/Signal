@@ -32,12 +32,24 @@ export function generateStorylineSet(input: GenerateStorylineSetInput): Storylin
     action: classification.action,
   });
 
+  const scenarios = normalizeScenarioProbabilities([
+    buildBest(scored, baseTarget, stopPrice, horizon),
+    buildBase(scored, baseTarget, stopPrice, horizon, activeScenario),
+    buildConservative(scored, baseTarget, stopPrice, horizon),
+    buildWorst(scored, baseTarget, stopPrice, horizon),
+  ], {
+    activeScenario,
+    dataConfidence,
+    eventBlockerActive: classification.gates.eventBlockerGate === false,
+  });
+
   return {
     symbol: scored.symbol.symbol,
     symbolName: scored.symbol.name,
     generatedAt,
     status: revision.status,
     activeScenario,
+    probabilityMethod: "rule-normalized-v1",
     revisionSummary: revision.summary,
     revisionReasons: revision.reasons,
     scoreSnapshot: {
@@ -51,12 +63,7 @@ export function generateStorylineSet(input: GenerateStorylineSetInput): Storylin
       dataConfidence,
       strategyTags: scores.strategyTags,
     },
-    scenarios: [
-      buildBest(scored, baseTarget, stopPrice, horizon),
-      buildBase(scored, baseTarget, stopPrice, horizon, activeScenario),
-      buildConservative(scored, baseTarget, stopPrice, horizon),
-      buildWorst(scored, baseTarget, stopPrice, horizon),
-    ],
+    scenarios,
   };
 }
 
@@ -109,7 +116,7 @@ function buildBase(scored: GenerateStorylineSetInput["scored"], baseTarget: numb
     ]),
     confirmationSignals: ["終値ベースでエントリー水準を維持", "リスク点が60以下を維持", "出来高が20日平均以上"],
     invalidationSignals: compact([
-      classification.scenario ? `損切り目安 ${yen(stopPrice)} を割り込む` : "直近支持線を割り込む",
+      classification.scenario ? `無効化ライン ${yen(stopPrice)} を割り込む` : "直近支持線を割り込む",
       "データ信頼度が60未満へ低下",
       "Event Blockerが発生",
     ]),
@@ -125,14 +132,14 @@ function buildConservative(scored: GenerateStorylineSetInput["scored"], baseTarg
     label: "Conservative Story",
     probabilityPct: clampProbability(26 + (100 - scores.riskScore) * 0.10 + scores.entryTimingScore * 0.08),
     horizon,
-    thesis: "上値は限定的だが、損切りと小さな利確を優先して期待値を守るシナリオ。",
+    thesis: "上値は限定的だが、無効化ラインと段階的な確認を優先して期待値を守るシナリオ。",
     expectedReturnPct: r1(((conservativeTarget - snapshot.close) / snapshot.close) * 100),
     targetPrice: yen(conservativeTarget),
     stopPrice: yen(stopPrice),
     keyDrivers: compact([
       `Risk ${scores.riskScore}`,
       `Data Confidence ${classification.gateDetails.find((gate) => gate.key === "dataConfidenceGate")?.actual ?? "n/a"}`,
-      "早めの利確を優先",
+      "早めの出口条件確認を優先",
     ]),
     confirmationSignals: ["押し目で下値が浅い", "反発時の出来高が細らない", "弱いゲートが改善する"],
     invalidationSignals: ["反発が弱く横ばい化", "Entry Timingが60未満に低下", "RRが1.2未満に低下"],
@@ -203,10 +210,51 @@ function clampProbability(value: number): number {
   return Math.max(5, Math.min(80, Math.round(value)));
 }
 
+function normalizeScenarioProbabilities(
+  scenarios: StorylineScenario[],
+  context: { activeScenario: StorylineKind; dataConfidence: number; eventBlockerActive: boolean },
+): StorylineScenario[] {
+  const raw = scenarios.map((scenario) => {
+    let rawWeight = scenario.probabilityPct;
+    if (scenario.kind === context.activeScenario) rawWeight *= 1.25;
+    if (context.dataConfidence < 60) {
+      if (scenario.kind === "best") rawWeight *= 0.55;
+      if (scenario.kind === "conservative" || scenario.kind === "worst") rawWeight *= 1.2;
+    }
+    if (context.eventBlockerActive) {
+      if (scenario.kind === "best") rawWeight *= 0.45;
+      if (scenario.kind === "base") rawWeight *= 0.8;
+      if (scenario.kind === "conservative" || scenario.kind === "worst") rawWeight *= 1.35;
+    }
+    return { scenario, rawWeight: Math.max(1, rawWeight) };
+  });
+  const total = raw.reduce((sum, item) => sum + item.rawWeight, 0);
+  const floors = raw.map((item) => ({
+    ...item,
+    normalized: (item.rawWeight / total) * 100,
+  }));
+  const rounded = floors.map((item) => Math.floor(item.normalized));
+  let remainder = 100 - rounded.reduce((sum, value) => sum + value, 0);
+  const order = floors
+    .map((item, index) => ({ index, fraction: item.normalized - Math.floor(item.normalized) }))
+    .sort((a, b) => b.fraction - a.fraction);
+  for (const item of order) {
+    if (remainder <= 0) break;
+    rounded[item.index] += 1;
+    remainder -= 1;
+  }
+  return raw.map((item, index) => ({
+    ...item.scenario,
+    rawWeight: r1(item.rawWeight),
+    normalizedProbabilityPct: rounded[index],
+    probabilityPct: rounded[index],
+  }));
+}
+
 function topRiskNotes(scored: GenerateStorylineSetInput["scored"]): string[] {
   const negative = [...scored.scores.contributions.risk, ...scored.scores.contributions.entryTiming]
-    .filter((contribution) => contribution.polarity === "negative")
-    .sort((a, b) => b.contribution - a.contribution)
+    .filter((contribution) => contribution.signedImpact < 0)
+    .sort((a, b) => b.impactMagnitude - a.impactMagnitude)
     .slice(0, 3)
     .map((contribution) => `${contribution.label}: ${contribution.reason}`);
   return negative.length > 0 ? negative : ["主要リスクは現時点で限定的"];

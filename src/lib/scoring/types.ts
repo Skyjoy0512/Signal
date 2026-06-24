@@ -20,6 +20,7 @@ export interface ScoringOutput {
   finalEntryScore: number; strategyFitScores: StrategyFitScores; strategyTags: StrategyTag[];
   breakdown: ScoreBreakdown;
   contributions: ScoreContributions;
+  featureAvailability: Record<string, boolean>;
 }
 
 export interface ScoreBreakdown {
@@ -39,8 +40,12 @@ export interface ScoreContribution {
   rawScore: number;
   weight: number;
   contribution: number;
+  signedImpact: number;
+  impactMagnitude: number;
   polarity: ContributionPolarity;
   reason: string;
+  available?: boolean;
+  missingReason?: string;
 }
 
 export type ScoreContributions = Record<ScoreComponent, ScoreContribution[]>;
@@ -78,6 +83,15 @@ export interface TradeScenario {
   upsideConservativePct: number; upsideBasePct: number; upsideBullPct: number;
   downsidePct: number; riskRewardBase: number;
   expectedHoldingPeriod: string; calculationMethod: string;
+  scenarioQuality: ScenarioQuality;
+}
+
+export interface ScenarioQuality {
+  atrSource: "actual" | "estimated" | "unavailable";
+  swingHighSource: "actual" | "missing";
+  swingLowSource: "actual" | "missing";
+  confidence: number;
+  warnings: string[];
 }
 
 export interface LlmScoreAdjustment {

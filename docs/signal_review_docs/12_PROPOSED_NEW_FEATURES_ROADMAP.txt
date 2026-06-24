@@ -1,0 +1,250 @@
+12 Suggested New Features Roadmap
+=================================
+
+目的
+----
+
+個人投資家向けの判断支援として価値が高く、段階的に実装しやすい機能を優先順に整理する。
+最初から大きな実装にせず、現行構造を活かして小さく追加する。
+
+
+Feature-1: Review Queue
+-----------------------
+
+優先度: 高
+実装難易度: 中
+価値: 非常に高い
+
+概要:
+ユーザーが毎日最初に見るべき銘柄・論点をまとめる画面。
+
+表示条件:
+- 新規レビュー候補
+- 前回からfinalEntryScoreが大きく変化
+- riskScoreが悪化
+- eventBlockerが追加
+- storylineが改訂
+- dataConfidenceが低下
+- 保有銘柄がtarget/stopに接近
+
+実装ステップ:
+1. 既存mock scan結果からReview Queueを生成。
+2. score_snapshots保存後、前回との差分でqueue生成。
+3. review_eventsテーブル追加後、履歴化。
+
+
+Feature-2: Watchlist / Universe管理
+----------------------------------
+
+優先度: 高
+実装難易度: 低-中
+価値: 高
+
+概要:
+universe_membersを使い、お気に入り・監視中・保有中・除外などを管理する。
+
+状態例:
+- favorite
+- watch
+- holding
+- excluded
+- theme
+- priority_scan
+
+実装ステップ:
+1. UIでwatchlist追加/削除。
+2. daily scan対象をwatchlistへ限定。
+3. later: theme別watchlist。
+
+
+Feature-3: 保有銘柄の再評価
+--------------------------
+
+優先度: 高
+実装難易度: 中
+価値: 高
+
+概要:
+positions画面で、保有銘柄を現在のスコア・リスク・ストーリーラインで再評価する。
+
+表示項目:
+- 現在score
+- entry時scoreとの差分
+- target/stop接近
+- risk悪化
+- scenario改訂
+- event blocker
+
+注意:
+「売る/買う」ではなく「確認観点」として表示する。
+
+
+Feature-4: 決算/イベント前後の警戒
+---------------------------------
+
+優先度: 高
+実装難易度: 中
+価値: 高
+
+概要:
+決算日、権利落ち、配当、重要IR、市場イベントの前後でevent blockerやwarningを出す。
+
+実装ステップ:
+1. events_calendar schema追加。
+2. getActiveEvents repositoryを実データ接続。
+3. scoring inputにeventContextを渡す。
+4. UIにevent warning表示。
+
+
+Feature-5: ストーリーライン改訂通知
+----------------------------------
+
+優先度: 中-高
+実装難易度: 中
+価値: 高
+
+概要:
+前回storylineから変化があった銘柄を通知・レビューキュー化する。
+
+通知条件:
+- activeScenarioが悪化
+- riskScore +10以上
+- finalEntryScore -10以上
+- Worst probability上昇
+- target/stop再計算でRR悪化
+- event blocker追加
+
+実装ステップ:
+1. storyline_setsのprevious_set_idを活用。
+2. revision_summaryを生成。
+3. review_eventsに保存。
+4. Dashboardに表示。
+
+
+Feature-6: 外部レビュー用Pack強化
+--------------------------------
+
+優先度: 中
+実装難易度: 低-中
+価値: 中-高
+
+概要:
+匿名化されたMarkdown packを作り、外部LLMや他者レビューに使えるようにする。
+
+含める項目:
+- score breakdown
+- gate details
+- top positive/negative drivers
+- scenarioQuality
+- bull/base/bear cases
+- data caveats
+- revision history
+- disclaimer
+
+注意:
+- secret sanitize必須。
+- 保有数量や個人メモはopt-in。
+
+
+Feature-7: Outcome Dashboard
+---------------------------
+
+優先度: 中
+実装難易度: 中-高
+価値: 高
+
+概要:
+過去のsignalやstorylineがどうなったかを可視化する。
+
+表示例:
+- スコア帯別1W/1M/3M平均return
+- hit target率
+- hit stop率
+- MFE/MAE
+- avoidにしたが上がった銘柄
+- strong candidateの外れパターン
+
+実装前提:
+- price_observations
+- signal_outcomes
+- storyline_outcomes
+
+
+Feature-8: Data Quality Dashboard
+--------------------------------
+
+優先度: 中
+実装難易度: 中
+価値: 中
+
+概要:
+データの鮮度・欠損・推定値を可視化する。
+
+表示項目:
+- source別confidence
+- stale data
+- missing fields
+- estimated scenario ratio
+- mock data usage
+
+価値:
+スコアの過信を防ぐ。
+LLMにも正しい不確実性を渡せる。
+
+
+Feature-9: Portfolio Context
+---------------------------
+
+優先度: 中-低
+実装難易度: 中-高
+価値: 高
+
+概要:
+新規候補の良し悪しだけでなく、現在の保有ポートフォリオに対して有用かを見る。
+
+表示例:
+- セクター集中
+- 相関が高い銘柄
+- 既存保有と同じリスク要因
+- cash ratio
+- portfolio-level drawdown risk
+
+注意:
+個人の保有情報を扱うため、external packではデフォルト除外。
+
+
+Feature-10: Backtest / Calibration
+---------------------------------
+
+優先度: 低-中
+実装難易度: 高
+価値: 高
+
+概要:
+scoreやsignalの妥当性を過去データで確認する。
+
+注意:
+最初から大規模なバックテスト基盤にしない。
+まずは保存済みscore_snapshotに対するforward outcome評価から始める。
+
+段階:
+1. forward outcome評価
+2. score帯別統計
+3. strategyTag別統計
+4. market regime別統計
+5. threshold calibration
+
+
+推奨実装順
+----------
+
+1. Review Queue
+2. Watchlist / Universe管理
+3. 保有銘柄の再評価
+4. 決算/イベント警戒
+5. ストーリーライン改訂通知
+6. 外部レビューPack強化
+7. Outcome Dashboard
+8. Data Quality Dashboard
+9. Portfolio Context
+10. Backtest / Calibration

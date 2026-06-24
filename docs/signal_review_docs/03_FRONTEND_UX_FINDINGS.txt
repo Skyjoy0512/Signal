@@ -1,0 +1,203 @@
+03 Frontend / UX Findings
+=========================
+
+全体評価
+--------
+
+Signalの画面構成は、個人投資家の分析導線として必要な要素を広く持っている。
+
+主な画面:
+- dashboard
+- candidates
+- companies
+- compare
+- industries
+- positions
+- review
+- screening
+- settings
+
+ただし、画面が増えているため、初見ユーザーが「今日どこを見ればよいか」を判断しにくい可能性がある。
+また、スコアやシグナルの表示が強すぎると、投資助言や売買推奨に見えるリスクがある。
+
+
+UX-1: Dashboardに「今日のレビュー順」を出す
+---------------------------------------
+
+問題:
+画面遷移は揃っているが、投資家が毎日最初に見るべき順番が弱い。
+
+改善案:
+DashboardにReview Queueを置く。
+
+表示例:
+1. 地合い確認
+2. 新規レビュー候補
+3. 保有銘柄の警戒
+4. 決算/イベント前後の銘柄
+5. 前回ストーリーラインから変化した銘柄
+6. データ不足で要確認の銘柄
+
+UI文言例:
+- 今日の確認キュー
+- 優先レビュー候補
+- 変化が大きい銘柄
+- イベント前後の注意銘柄
+- データ不足のため参考扱い
+
+避ける文言:
+- 今日買うべき銘柄
+- 強い買い
+- 推奨銘柄
+- 自動売買候補
+
+
+UX-2: Candidatesは「候補一覧」から「判断支援ボード」へ寄せる
+----------------------------------------------------------
+
+改善案:
+候補カードごとに以下を表示する。
+
+1. Gate Summary
+- finalEntryScoreGate
+- riskGate
+- rrGate
+- dataConfidenceGate
+- eventBlockerGate
+
+2. Positive Drivers
+- 候補度を押し上げた要素
+- score contribution上位
+
+3. Negative / Caution Drivers
+- risk要因
+- データ不足
+- event blocker
+- RR不足
+
+4. Scenario Quality
+- ATRが実測か推定か
+- swing high/lowがあるか
+- target/stopの根拠が弱くないか
+
+5. ActionではなくReview Status
+- 未レビュー
+- 要比較
+- 保留
+- 除外
+- 保有中なら再評価
+
+
+UX-3: スコア表現を断定的にしない
+-------------------------------
+
+置き換え推奨:
+
+現在候補:
+- Strong Entry
+- Entry候補
+- 買い候補
+- Entry
+- 損切
+- 目標
+- 買い候補として優先確認
+
+推奨文言:
+- 最優先レビュー候補
+- 追加確認候補
+- 候補度
+- 想定エントリー水準
+- 無効化ライン
+- 参考ターゲット
+- 条件が揃っているため優先レビュー
+
+UI注記:
+スコアとシナリオは投資判断の補助情報です。売買を推奨するものではありません。データ品質、イベント、地合い、保有状況を確認して判断してください。
+
+
+UX-4: チャート改善
+-----------------
+
+対象:
+- src/components/ui/chart.tsx
+- src/components/candidate-visuals.tsx
+- src/components/fundamental-visuals.tsx
+
+改善方針:
+- ChartContainerの責務を一本化する。
+- ResizeObserverで実測するなら、width/heightを子chartに渡す。
+- ResponsiveContainerを使うならChartContainerはただのwrapperにする。
+- tooltipにはdataConfidence, eventBlocker, scenarioQualityを出す。
+- chartがN/Aや推定値を含む場合は凡例か注記で明示する。
+
+チャートごとの改善:
+
+ScoreRiskScatter:
+- x軸: finalEntryScoreではなく候補度として表示。
+- y軸: riskScore。
+- tooltip: symbol, name, finalEntryScore, riskScore, dataConfidence, eventBlocker, RR, top risk。
+- 色やラベルでsignal tierだけでなくreview statusを表現する。
+
+SectorStrengthChart:
+- 平均scoreだけでなくmedian, avoid ratio, risk medianを出す。
+- セクター内の分布が見えるようにする。
+
+FundamentalTrendCharts:
+- 推定値/欠損値/古い値を明示する。
+- 期間が短い場合はtrend判定を弱くする。
+
+PeerMetricBars:
+- 同業中央値との差分を表示する。
+- 業種違い比較の場合は警告を出す。
+
+
+UX-5: Compare画面の改善
+----------------------
+
+現状の比較軸:
+- 売上
+- 営業利益
+- 営業利益率
+- ROE
+- PER
+- PBR
+
+改善案:
+- 同業比較かどうかを判定する。
+- 業種が違う場合は「比較条件が揃っていません」と表示する。
+- 同業中央値との差分を出す。
+- PER/PBRは高低を断定せず「バリュエーション確認要」とする。
+- quality scoreをUI内だけで計算せず、src/lib/fundamentals/quality-score.tsへ分離してテストする。
+
+
+UX-6: Review画面を強化する
+-------------------------
+
+Review画面は、将来のoutcome評価の入口にする。
+
+初期実装で出すもの:
+- 前回レビューからscoreが大きく変わった銘柄
+- storylineが改訂された銘柄
+- riskが悪化した銘柄
+- event blockerが発生した銘柄
+- dataConfidenceが低下した銘柄
+- target/stopに近づいた銘柄
+
+将来実装:
+- 1W/1M/3M outcome
+- hit target / hit stop
+- MFE / MAE
+- user decisionとの比較
+
+
+UX-7: 投資助言に見えないための表示ルール
+--------------------------------------
+
+全画面共通ルール:
+- 「買い」「売り」「推奨」を主要CTAにしない。
+- scoreは「候補度」「確認優先度」として扱う。
+- target/stopは「参考ターゲット」「無効化ライン」として表示する。
+- LLM出力は「AIレビュー」ではなく「レビュー補助」または「追加確認観点」と表示する。
+- 常にdataConfidenceを表示する。
+- 推定値は推定と明記する。
+- event blockerがある場合は候補度より警告を優先表示する。

@@ -1,0 +1,276 @@
+09 Test Plan Improvements
+=========================
+
+目的
+----
+
+投資分析ロジックは、小さな式変更でも候補判定やUI表示が大きく変わる。
+そのため、unit test、fixture regression、API test、UI chart test、LLM integration testを追加し、スコアリング変更時の事故を防ぐ。
+
+
+TEST-1: P0 scoring regression tests
+----------------------------------
+
+対象:
+- src/lib/scoring/scoring.test.ts
+
+追加ケース:
+
+1. neutral components stay neutral
+- opportunity = 50
+- entryTiming = 50
+- risk = 50
+- conviction = 50
+- market neutral
+- sector neutral
+期待:
+- finalEntryScoreは45-55。
+
+2. weak symbol does not become entry candidate
+- symbolScore相当30
+- neutral market/sector
+期待:
+- finalEntryScoreはentry threshold未満。
+
+3. bullish market adjusts but does not dominate
+- symbolScore中立
+- bullish market/sector
+期待:
+- 加点はされるが70を超えない。
+
+4. bearish market cap applies
+期待:
+- finalEntryScore <= FINAL_SCORE_CAPS.bearishMarket
+
+5. low data cap applies
+期待:
+- finalEntryScore <= FINAL_SCORE_CAPS.lowDataConfidence
+
+6. event blocker cap applies
+期待:
+- finalEntryScore <= FINAL_SCORE_CAPS.eventBlocker
+
+7. forbidden cap applies
+期待:
+- finalEntryScore <= FINAL_SCORE_CAPS.forbidden
+
+
+TEST-2: LLM adjustment guard tests
+---------------------------------
+
+対象:
+- src/lib/analysis/analysis.test.ts
+- src/lib/scoring/scoring.test.ts
+
+追加ケース:
+
+1. optimistic LLM adjustment cannot bypass low data cap
+入力:
+- dataConfidence < 60
+- LLM score_adjustment +10
+期待:
+- finalEntryScore <= lowDataConfidence cap
+
+2. optimistic LLM adjustment cannot bypass event blocker
+入力:
+- eventBlockerActive = true
+期待:
+- finalEntryScore <= eventBlocker cap
+
+3. optimistic LLM adjustment cannot bypass bearish market cap
+入力:
+- market.condition = bearish
+期待:
+- finalEntryScore <= bearishMarket cap
+
+4. optimistic LLM adjustment cannot bypass forbidden cap
+入力:
+- isForbidden = true
+期待:
+- finalEntryScore <= forbidden cap
+
+5. critic downgrade blocks positive adjustment
+入力:
+- critic.required_downgrade = true
+期待:
+- positive adjustment is ignored or reduced
+
+6. malformed LLM JSON repair
+入力:
+- broken JSON
+期待:
+- repair成功ならvalid output
+- repair失敗ならfallback to rule-based
+
+
+TEST-3: investment analysis fixtures
+-----------------------------------
+
+追加fixture群:
+
+1. Strong trend but low RR
+期待:
+- final may be high
+- signal should not be strong entry candidate
+- rrGate warning
+
+2. High score but overheated
+条件:
+- RSI > 80
+- 20d return > 15%
+期待:
+- riskScore high
+- final capped or warning
+
+3. Low data confidence
+期待:
+- avoid or low confidence
+- UI warning
+
+4. Event blocker before earnings
+期待:
+- no entry candidate
+- eventBlockerGate active
+
+5. Bearish market with strong individual symbol
+期待:
+- final capped
+- market risk displayed
+
+6. Volume breakout
+期待:
+- entryTiming improves
+- scenario generated
+- RR checked
+
+7. 52-week high then reversal
+期待:
+- breakout failure risk
+- no overly optimistic signal
+
+8. Good fundamentals but expensive valuation
+期待:
+- opportunity mixed
+- valuation risk shown
+
+9. Small cap / low liquidity
+期待:
+- liquidity risk high
+- data confidence lower if needed
+
+10. ATR missing
+期待:
+- scenarioQuality.atrSource = estimated or unavailable
+- warning displayed
+
+
+TEST-4: Chart UI tests
+---------------------
+
+対象:
+- src/components/ui/chart.tsx
+- src/components/candidate-visuals.tsx
+- src/components/fundamental-visuals.tsx
+
+追加:
+- ResizeObserver mock
+- initial width/height = 0 does not crash
+- measured width/height are passed to chart
+- resize updates chart
+- hidden/re-shown container does not crash
+- ResponsiveContainer廃止方針ならimportが残っていないことを確認
+
+
+TEST-5: API route tests
+----------------------
+
+対象:
+- src/app/api/settings/llm/route.ts
+- src/app/api/settings/llm/test/route.ts
+- src/app/api/jobs/daily-scan/route.ts
+- src/app/api/external-pack/route.ts
+
+追加:
+
+LLM settings:
+- no token -> 401
+- valid token -> 200
+- invalid provider -> 400
+- invalid temperature -> 400
+- negative cost -> 400
+- invalid baseUrl localhost -> 400
+- invalid baseUrl private IP -> 400
+
+Daily scan:
+- no token -> 401
+- valid token -> 200
+- job error -> { ok:false, code }
+
+External pack:
+- no token -> 401
+- no secret leakage
+- output includes disclaimer
+- invalid symbol handled safely
+
+
+TEST-6: Supabase repository tests
+--------------------------------
+
+対象:
+- src/lib/supabase/repository.ts
+- src/lib/supabase/types.ts
+
+追加:
+- insert score_snapshot with full score breakdown
+- select latest score snapshot
+- insert storyline_set and scenarios
+- insert outcome rows after new migration
+- handles missing Supabase env gracefully in tests
+
+
+TEST-7: Storyline tests
+----------------------
+
+対象:
+- src/lib/storylines/engine.ts
+- src/lib/storylines/storylines.test.ts
+
+追加:
+- probabilities sum to 100
+- activeScenario consistent with risk/final score
+- low data reduces optimistic scenario probability
+- event blocker increases conservative/worst scenario probability
+- target/stop missing triggers quality warning
+
+
+TEST-8: Snapshot/versioning tests
+--------------------------------
+
+対象:
+- src/lib/analysis/llm-enhancer.ts
+- src/lib/analysis/types.ts
+
+追加:
+- LLM input snapshot includes schemaVersion
+- scoring config version included
+- dataSources included
+- featureAvailability included
+- scenarioQuality included
+- missing features are not silently scored as neutral
+
+
+CI期待コマンド
+-------------
+
+Codexは各PRで最低限以下を実行すること。
+
+- npm run typecheck
+- npm test
+- npm run lint
+- npm run build
+
+可能なら追加:
+- npm test -- scoring
+- npm test -- llm
+- npm test -- storylines
+- npm test -- api

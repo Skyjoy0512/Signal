@@ -17,8 +17,8 @@ interface SignalData {
 }
 
 const ACTION: Record<string, string> = {
-  strong_entry_candidate: "Strong Entry",
-  entry_candidate: "Entry候補",
+  strong_entry_candidate: "最優先レビュー候補",
+  entry_candidate: "追加確認候補",
   watch: "監視",
   avoid: "見送り",
 };
@@ -81,9 +81,9 @@ export function SignalCard({ signal }: { signal: SignalData }) {
           <div className="divider" />
           <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 6 }}>
             {[
-              { label: "Entry", val: signal.scenario.entryPrice.toLocaleString() },
-              { label: "損切", val: signal.scenario.stopPrice.toLocaleString() },
-              { label: "目標", val: signal.scenario.targetBase.toLocaleString() },
+              { label: "想定水準", val: signal.scenario.entryPrice.toLocaleString() },
+              { label: "無効化ライン", val: signal.scenario.stopPrice.toLocaleString() },
+              { label: "参考ターゲット", val: signal.scenario.targetBase.toLocaleString() },
               { label: "RR", val: signal.scenario.riskRewardBase.toFixed(1) },
             ].map((s, i) => (
               <div key={i} className="font-mono" style={{ textAlign: "center" }}>

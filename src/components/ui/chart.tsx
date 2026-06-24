@@ -11,10 +11,10 @@ export function ChartContainer({
 }: {
   config?: ChartConfig;
   className?: string;
-  children: React.ReactNode;
+  children: (size: { width: number; height: number }) => React.ReactNode;
 }) {
   const ref = React.useRef<HTMLDivElement>(null);
-  const [ready, setReady] = React.useState(false);
+  const [size, setSize] = React.useState<{ width: number; height: number } | null>(null);
 
   React.useLayoutEffect(() => {
     const node = ref.current;
@@ -22,18 +22,23 @@ export function ChartContainer({
 
     const update = () => {
       const { width, height } = node.getBoundingClientRect();
-      setReady(width > 0 && height > 0);
+      if (width > 0 && height > 0) {
+        setSize({ width: Math.round(width), height: Math.round(height) });
+      }
     };
 
-    update();
-    const observer = new ResizeObserver(update);
-    observer.observe(node);
-    return () => observer.disconnect();
+    const frame = requestAnimationFrame(update);
+    const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(update);
+    observer?.observe(node);
+    return () => {
+      cancelAnimationFrame(frame);
+      observer?.disconnect();
+    };
   }, []);
 
   return (
     <div ref={ref} className={cn("h-64 w-full min-w-0 overflow-hidden", className)} style={{ minWidth: 240, minHeight: 160 }}>
-      {ready ? children : null}
+      {size && size.width > 0 && size.height > 0 ? children(size) : null}
     </div>
   );
 }

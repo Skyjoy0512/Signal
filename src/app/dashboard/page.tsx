@@ -4,6 +4,7 @@ import { useState, useCallback } from "react";
 import Link from "next/link";
 import { Bell, ChartNoAxesCombined, Gauge, ShieldCheck, Target } from "lucide-react";
 import { ScoreRing } from "@/components/visual-primitives";
+import { ReviewQueue } from "@/components/review-queue";
 
 interface ScanSummary {
   strong: number; entry: number; watch: number; avoided: number; date: string;
@@ -47,6 +48,7 @@ export default function DashboardPage() {
         <div className="page-header-copy">
           <h1 className="page-title">ダッシュボード</h1>
           <p className="page-subtitle">Phase1-A / 全モジュール実装済み / {result ? `最終スキャン: ${result.date}` : "未実行"}</p>
+          <p className="meaning-note">Signalは投資助言や売買指示ではなく、候補銘柄のレビュー観点を整理するための個人利用ツールです。</p>
         </div>
         <div className="page-action-stack">
           <button onClick={runScan} disabled={running} className="btn btn-primary" style={{ fontSize: 13, padding: "8px 20px" }}>
@@ -76,12 +78,12 @@ export default function DashboardPage() {
         <div style={{ marginBottom: 14 }}>
           <div className="grid-stats">
             <Link href="/candidates" className="card card-hover no-underline animate-fade-in">
-              <div className="stat-label">Strong Entry</div>
+              <div className="stat-label">最優先レビュー候補</div>
               <div className="stat-value" style={{ color: "var(--color-brass-gold)" }}>{result.strong}</div>
               <div className="stat-sub">S / A ティア</div>
             </Link>
             <Link href="/candidates" className="card card-hover no-underline animate-fade-in" style={{ animationDelay: "50ms" }}>
-              <div className="stat-label">Entry候補</div>
+              <div className="stat-label">追加確認候補</div>
               <div className="stat-value" style={{ color: "var(--color-ember-orange)" }}>{result.entry}</div>
               <div className="stat-sub">A / B ティア</div>
             </Link>
@@ -110,8 +112,8 @@ export default function DashboardPage() {
               {result.avoided > 0 && <div style={{ width: `${(result.avoided / total) * 100}%`, background: "var(--color-edge-ash)", borderRadius: 3 }} />}
             </div>
             <div style={{ display: "flex", gap: 12, marginTop: 8, flexWrap: "wrap" }}>
-              <span style={{ fontSize: 10, color: "var(--color-brass-gold)" }}>Strong</span>
-              <span style={{ fontSize: 10, color: "var(--color-ember-orange)" }}>Entry</span>
+              <span style={{ fontSize: 10, color: "var(--color-brass-gold)" }}>最優先</span>
+              <span style={{ fontSize: 10, color: "var(--color-ember-orange)" }}>追加確認</span>
               <span style={{ fontSize: 10, color: "var(--color-muted-clay)" }}>Watch</span>
               <span style={{ fontSize: 10, color: "var(--color-edge-ash)" }}>Avoid</span>
             </div>
@@ -155,6 +157,8 @@ export default function DashboardPage() {
           </div>
         </>
       )}
+
+      <ReviewQueue />
 
       {/* Module status */}
       <div className="card" style={{ marginBottom: 14 }}>

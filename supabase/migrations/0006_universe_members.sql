@@ -17,6 +17,8 @@ create index if not exists universe_members_type_enabled_idx
 
 alter table public.universe_members enable row level security;
 
+grant select, insert, update, delete on table public.universe_members to service_role;
+
 do $$
 begin
   if not exists (
@@ -28,7 +30,8 @@ begin
     create policy universe_members_service_role_all
       on public.universe_members
       for all
-      using (auth.role() = 'service_role')
-      with check (auth.role() = 'service_role');
+      to service_role
+      using (true)
+      with check (true);
   end if;
 end $$;

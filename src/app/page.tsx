@@ -13,7 +13,7 @@ import {
 
 const modules = [
   { title: "階層分析", desc: "市場・セクター・テーマ・銘柄の4層で地合いを数値化", href: "/dashboard", meta: "Market", icon: Layers3, image: "https://images.unsplash.com/photo-1642790106117-e829e14a795f?w=520&q=80&fit=crop" },
-  { title: "候補銘柄", desc: "機械式スコアとLLMレビューでEntry候補を整理", href: "/candidates", meta: "Signals", icon: Activity, image: "https://images.unsplash.com/photo-1611974789855-9c2a0a7236a3?w=520&q=80&fit=crop" },
+  { title: "候補銘柄", desc: "機械式スコアとLLMレビューで確認候補を整理", href: "/candidates", meta: "Signals", icon: Activity, image: "https://images.unsplash.com/photo-1611974789855-9c2a0a7236a3?w=520&q=80&fit=crop" },
   { title: "条件検索", desc: "売上・利益率・ROE・PERなどで銘柄を抽出", href: "/screening", meta: "Screening", icon: Target, image: "https://images.unsplash.com/photo-1460925895917-afdab827c52f?w=520&q=80&fit=crop" },
   { title: "企業比較", desc: "複数企業を売上・利益率・指標で横並び比較", href: "/compare", meta: "Compare", icon: Activity, image: "https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=520&q=80&fit=crop" },
   { title: "LINE通知", desc: "朝まとめ・即時通知・予算管理・クールダウン", href: "/settings", meta: "Alerts", icon: Bell, image: "https://images.unsplash.com/photo-1516321318423-f06f85e504b3?w=520&q=80&fit=crop" },
@@ -57,7 +57,7 @@ export default function Home() {
             </div>
             <h1 className="hero-title" style={{ marginTop: 14 }}>Signal</h1>
             <p className="hero-copy">
-              日本株の地合い、候補、Entry、リスク制御を朝の判断順にまとめます。
+              日本株の地合い、候補度、想定水準、リスク制御を朝の確認順にまとめます。
             </p>
             <div className="hero-actions">
               <Link href="/dashboard" className="btn btn-primary no-underline">ダッシュボードを開く</Link>

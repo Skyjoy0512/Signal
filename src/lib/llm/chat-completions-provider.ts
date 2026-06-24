@@ -54,6 +54,15 @@ export class ChatCompletionsProvider implements LlmProvider {
     const inputTokens = json.usage?.prompt_tokens ?? 0;
     const outputTokens = json.usage?.completion_tokens ?? 0;
     const estimatedCost = (inputTokens / 1_000_000) * this.inputTokenCostPerMillion + (outputTokens / 1_000_000) * this.outputTokenCostPerMillion;
-    return { content, inputTokens, outputTokens, estimatedCost: Math.round(estimatedCost * 1_000_000) / 1_000_000, latencyMs, model: params.model };
+    return {
+      content,
+      inputTokens,
+      outputTokens,
+      estimatedCost: Math.round(estimatedCost * 1_000_000) / 1_000_000,
+      latencyMs,
+      model: params.model,
+      finishReason: choice.finish_reason ?? null,
+      requestId: typeof json.id === "string" ? json.id : null,
+    };
   }
 }

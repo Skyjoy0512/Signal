@@ -1,0 +1,160 @@
+04 Backend / API / Supabase Findings
+====================================
+
+全体評価
+--------
+
+現行のAPI routesとSupabase schemaは、開発初期としては十分な骨格がある。
+ただし、個人利用でも外部デプロイするなら、API routeの認可、入力検証、secret管理、mock/real data境界の明確化が必要。
+
+SupabaseはRLS有効かつservice_role中心のpolicyであるため、Next.js API routeが事実上のセキュリティ境界になる。
+
+
+BE-1: API routeの責務を整理する
+-------------------------------
+
+現状の代表route:
+- /api/signals
+- /api/jobs/daily-scan
+- /api/storylines
+- /api/fundamentals
+- /api/settings/llm
+- /api/settings/llm/test
+- /api/external-pack
+- /api/line/webhook
+
+問題:
+/api/signals や /api/jobs/daily-scan が runMockScan に依存しており、mockとrealの境界が曖昧になりやすい。
+
+改善案:
+- /api/dev/mock-signals を開発用mockにする。
+- /api/signals はDBに保存済みの最新signal取得に寄せる。
+- /api/jobs/daily-scan は実データscan jobに寄せる。
+- UI向け整形は src/lib/api-presenters/signals-presenter.ts へ分離する。
+
+成功レスポンス:
+  { ok: true, data: ... }
+
+エラーレスポンス:
+  { ok: false, code: string, message: string, details?: unknown }
+
+
+BE-2: 認可を追加する
+-------------------
+
+対象route:
+- GET/POST /api/settings/llm
+- POST /api/settings/llm/test
+- POST /api/jobs/daily-scan
+- POST /api/external-pack
+- 将来のDB write route全般
+
+推奨実装:
+新規ファイル src/lib/api/auth.ts
+
+関数:
+  requireAdminRequest(req: Request): void | NextResponse
+
+仕様:
+- APP_ADMIN_TOKEN が設定されている場合、以下いずれかを要求する。
+  - Authorization: Bearer <token>
+  - x-signal-admin-token: <token>
+- productionではAPP_ADMIN_TOKEN未設定をエラーにする。
+- developmentでは未設定なら許可してもよいが、console warningを出す。
+
+
+BE-3: LLM settings入力検証を強化する
+-----------------------------------
+
+対象:
+- src/app/api/settings/llm/route.ts
+- src/lib/llm/settings.ts
+
+検証項目:
+- provider: deepseek または openai-compatible のみ。
+- enabled: boolean。
+- model: 空不可、最大長100。
+- baseUrl: https必須。
+- baseUrl: localhost, 127.0.0.1, 0.0.0.0, 169.254.169.254, private IP禁止。
+- temperature: 0以上1.5以下。
+- monthlyBudgetUsd: 0以上、上限任意。
+- dailyCostLimitUsd: 0以上、上限任意。
+- apiKey: 最大長、prefix previewのみ保存。
+
+理由:
+openai-compatible baseUrlを任意に許可するとSSRFや内部ネットワークアクセスのリスクがある。
+
+
+BE-4: Supabase service_role clientの名前を明確にする
+---------------------------------------------------
+
+対象:
+- src/lib/supabase/server.ts
+
+問題:
+createClientという名前だと、service_role clientか通常clientか分かりにくい。
+
+改善案:
+- createServiceRoleClient にリネームする。
+- 将来用に createServerAnonClient を別に作る。
+- service_role clientを使うrepositoryは明示的にadmin/repositoryとして分ける。
+
+
+BE-5: RLS設計
+-------------
+
+現状:
+各テーブルにRLSが有効化され、policyは auth.role() = 'service_role' 中心。
+
+個人利用では初期設計として成立するが、以下の前提を明文化すること。
+
+- DB直接アクセスはserver-side only。
+- client componentからservice_role keyは絶対に露出しない。
+- API routeは必ず認可する。
+- 将来multi-user化する場合は user_id / owner_id を各テーブルへ追加する。
+
+
+BE-6: LLM APIキー保存
+--------------------
+
+現状:
+llm_settings は api_key_ciphertext と api_key_preview を持つ。
+暗号化はAES-256-GCM。
+
+改善案:
+- productionでは APP_SETTINGS_ENCRYPTION_KEY 必須。
+- SUPABASE_SERVICE_ROLE_KEYを暗号鍵に兼用しない。
+- fallbackの signal-local-dev-settings-key はdevelopment専用に限定する。
+- encryption_key_versionをllm_settingsに追加する。
+- api_key_ciphertextをselectする関数を最小化する。
+- apiKeyPreviewはログ出力しない。
+
+
+BE-7: external-packの安全性
+--------------------------
+
+対象:
+- src/app/api/external-pack/route.ts
+
+改善案:
+- pack出力前にsecret-like patternをsanitizeする。
+- API key, Bearer token, Supabase URL, internal URL, local pathを除去。
+- ユーザーの保有数量やメモを含める場合はopt-inにする。
+- 冒頭に「投資助言依頼ではなく分析レビュー依頼」と明記する。
+
+
+BE-8: mock fallbackの明示
+------------------------
+
+問題:
+fundamentalsやsignalsでmock fallbackがある場合、UIやAPI responseでmock/estimated/realが分からないと誤認する。
+
+改善案:
+API responseに以下を含める。
+
+  dataSource: 'mock' | 'supabase' | 'external' | 'hybrid'
+  dataQuality: number
+  dataAsOf: string | null
+  warnings: string[]
+
+UIではmock/estimatedの場合にラベルを出す。

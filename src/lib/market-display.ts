@@ -68,8 +68,8 @@ export function riskTone(risk: number | null | undefined) {
 }
 
 export function finalScoreInsight(score: number) {
-  if (score >= 80) return "買い候補として優先確認。Entry条件と損切り幅を確認。";
-  if (score >= 65) return "監視候補。地合い・出来高・押し目を待つ。";
+  if (score >= 80) return "最優先レビュー候補。想定水準と無効化ラインを確認。";
+  if (score >= 65) return "追加確認候補。地合い・出来高・押し目を確認。";
   if (score >= 50) return "様子見。材料かテクニカル改善が必要。";
   return "見送り寄り。リスクまたはタイミングが弱い。";
 }

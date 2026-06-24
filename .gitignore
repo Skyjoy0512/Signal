@@ -8,3 +8,4 @@ node_modules/
 .codex/
 .headroom.json
 .tmp-ui-check/
+.vercel

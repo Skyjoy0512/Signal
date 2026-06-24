@@ -56,6 +56,9 @@ create index if not exists market_metrics_ticker_captured_at_idx
 alter table public.financial_statements enable row level security;
 alter table public.market_metrics enable row level security;
 
+grant select, insert, update, delete on table public.financial_statements to service_role;
+grant select, insert, update, delete on table public.market_metrics to service_role;
+
 do $$
 begin
   if not exists (
@@ -67,8 +70,9 @@ begin
     create policy financial_statements_service_role_all
       on public.financial_statements
       for all
-      using (auth.role() = 'service_role')
-      with check (auth.role() = 'service_role');
+      to service_role
+      using (true)
+      with check (true);
   end if;
 
   if not exists (
@@ -80,7 +84,8 @@ begin
     create policy market_metrics_service_role_all
       on public.market_metrics
       for all
-      using (auth.role() = 'service_role')
-      with check (auth.role() = 'service_role');
+      to service_role
+      using (true)
+      with check (true);
   end if;
 end $$;

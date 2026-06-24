@@ -7,6 +7,8 @@ export interface StorylineScenario {
   kind: StorylineKind;
   label: string;
   probabilityPct: number;
+  rawWeight?: number;
+  normalizedProbabilityPct?: number;
   horizon: string;
   thesis: string;
   expectedReturnPct: number;
@@ -24,6 +26,7 @@ export interface StorylineSet {
   generatedAt: string;
   status: StorylineStatus;
   activeScenario: StorylineKind;
+  probabilityMethod: "rule-normalized-v1" | "legacy";
   revisionSummary: string;
   revisionReasons: string[];
   scoreSnapshot: {

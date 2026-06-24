@@ -41,6 +41,9 @@ export const SCORE_WEIGHTS = {
   },
 } as const;
 
+export const SCORE_ENGINE_VERSION = "score-engine-v1";
+export const SCORING_CONFIG_VERSION = "scoring-config-v1";
+
 export const SIGNAL_THRESHOLDS = {
   dataConfidenceMinimum: 60,
   dataConfidenceEntry: 70,

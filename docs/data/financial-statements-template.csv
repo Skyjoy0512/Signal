@@ -1,0 +1,3 @@
+ticker,period,period_type,fiscal_year,fiscal_month,revenue,operating_income,net_income,assets,equity,liabilities,operating_cash_flow,roe,operating_margin,source,source_url
+7203,2026,annual,2026,3,48000,5000,3900,90000,36000,54000,4300,10.8,10.4,example_csv,https://example.com/7203
+8035.T,2026,annual,2026,3,22000,7000,5200,28000,17000,11000,5600,30.6,31.8,example_csv,https://example.com/8035

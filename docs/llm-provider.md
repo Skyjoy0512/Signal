@@ -30,6 +30,23 @@ LLM_CRITIC_MODEL=gpt-4.1
 
 For gateways such as OpenRouter, set `LLM_BASE_URL` to the gateway base URL and use the model ids required by that service.
 
+## GUI Settings and Admin Protection
+
+The `/settings` screen can read environment defaults and, when Supabase is configured, save LLM settings to the `llm_settings` table.
+
+```env
+APP_ADMIN_TOKEN=change-me
+APP_SETTINGS_ENCRYPTION_KEY=use-a-long-random-secret
+```
+
+- `APP_ADMIN_TOKEN` protects LLM settings, LLM connection tests, daily scan, and external-pack routes.
+- Send it as `Authorization: Bearer <token>` or `x-signal-admin-token: <token>` when calling protected APIs directly.
+- In the `/settings` screen, enter the same value in the `Admin token` field before loading, saving, or testing GUI-managed settings.
+- The browser stores that admin token in localStorage for convenience, so use this GUI only from a trusted local/private browser session.
+- In production, protected admin APIs fail closed when `APP_ADMIN_TOKEN` is missing.
+- `APP_SETTINGS_ENCRYPTION_KEY` encrypts saved API keys. In production it is required before writing GUI-managed LLM settings.
+- Do not reuse `SUPABASE_SERVICE_ROLE_KEY` as the settings encryption key in production.
+
 ## Model Roles
 
 - `LLM_REASONING_MODEL`: main analysis reviewer. Use the strongest model here.

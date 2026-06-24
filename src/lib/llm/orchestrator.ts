@@ -21,7 +21,7 @@ const DEFAULTS = {
 };
 
 function empty(status: LlmRunResult["status"] = "pending"): LlmRunResult {
-  return { status, outputJson: null, outputText: null, inputTokens: 0, outputTokens: 0, estimatedCost: 0, latencyMs: 0, errorMessage: null };
+  return { status, outputJson: null, outputText: null, inputTokens: 0, outputTokens: 0, estimatedCost: 0, latencyMs: 0, errorMessage: null, repairAttemptCount: 0 };
 }
 
 export class LlmOrchestrator {
@@ -61,7 +61,7 @@ export class LlmOrchestrator {
       const prompt = buildReasoningPrompt(input);
       const r = await this.provider.chatCompletion({ model: this.config.reasoningModel, messages: [{ role: "system", content: "You are a precise financial analysis model. Always respond with valid JSON only." }, { role: "user", content: prompt }], temperature: this.config.reasoningTemperature, maxTokens: 4096, responseFormat: { type: "json_object" } });
       const parsed = extractJson(r.content);
-      return { status: parsed !== null ? "completed" : "failed", outputJson: parsed, outputText: r.content, inputTokens: r.inputTokens, outputTokens: r.outputTokens, estimatedCost: r.estimatedCost, latencyMs: r.latencyMs, errorMessage: parsed === null ? "Failed to parse JSON" : null };
+      return { status: parsed !== null ? "completed" : "failed", outputJson: parsed, outputText: r.content, inputTokens: r.inputTokens, outputTokens: r.outputTokens, estimatedCost: r.estimatedCost, latencyMs: r.latencyMs, errorMessage: parsed === null ? "Failed to parse JSON" : null, model: r.model, finishReason: r.finishReason ?? null, requestId: r.requestId ?? null, repairAttemptCount: 0 };
     } catch (e) { return { ...empty("failed"), errorMessage: e instanceof Error ? e.message : "Unknown error" }; }
   }
 
@@ -74,7 +74,7 @@ export class LlmOrchestrator {
       if (fixed === null) { if (attempt < this.config.maxRepairAttempts) return this.runRepair(r.content, input, attempt + 1); return { ...empty("failed"), errorMessage: "Repair failed" }; }
       const ve = validateSchema(fixed, REASONING_SCHEMA);
       if (ve !== null) { if (attempt < this.config.maxRepairAttempts) return this.runRepair(JSON.stringify(fixed), input, attempt + 1); return { ...empty("failed"), errorMessage: ve.join("; ") }; }
-      return { status: "repaired", outputJson: fixed, outputText: r.content, inputTokens: r.inputTokens, outputTokens: r.outputTokens, estimatedCost: r.estimatedCost, latencyMs: r.latencyMs, errorMessage: null };
+      return { status: "repaired", outputJson: fixed, outputText: r.content, inputTokens: r.inputTokens, outputTokens: r.outputTokens, estimatedCost: r.estimatedCost, latencyMs: r.latencyMs, errorMessage: null, model: r.model, finishReason: r.finishReason ?? null, requestId: r.requestId ?? null, repairAttemptCount: attempt };
     } catch (e) { return { ...empty("failed"), errorMessage: `Repair error: ${e instanceof Error ? e.message : "Unknown"}` }; }
   }
 
@@ -86,7 +86,7 @@ export class LlmOrchestrator {
       if (parsed === null) return { ...empty("failed"), errorMessage: "Failed to parse critic" };
       const ve = validateSchema(parsed, CRITIC_SCHEMA);
       if (ve !== null) return { ...empty("failed"), errorMessage: ve.join("; ") };
-      return { status: "completed", outputJson: parsed, outputText: r.content, inputTokens: r.inputTokens, outputTokens: r.outputTokens, estimatedCost: r.estimatedCost, latencyMs: r.latencyMs, errorMessage: null };
+      return { status: "completed", outputJson: parsed, outputText: r.content, inputTokens: r.inputTokens, outputTokens: r.outputTokens, estimatedCost: r.estimatedCost, latencyMs: r.latencyMs, errorMessage: null, model: r.model, finishReason: r.finishReason ?? null, requestId: r.requestId ?? null, repairAttemptCount: 0 };
     } catch (e) { return { ...empty("failed"), errorMessage: `Critic error: ${e instanceof Error ? e.message : "Unknown"}` }; }
   }
 }

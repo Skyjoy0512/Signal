@@ -7,7 +7,6 @@ import {
   ComposedChart,
   Legend,
   Line,
-  ResponsiveContainer,
   Scatter,
   ScatterChart,
   Tooltip,
@@ -74,8 +73,8 @@ export function SectorStrengthChart({
 
   return (
     <ChartContainer className="h-72">
-      <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
-        <BarChart data={data} layout="vertical" margin={{ top: 8, right: 18, left: 44, bottom: 0 }}>
+      {({ width, height }) => (
+        <BarChart width={width} height={height} data={data} layout="vertical" margin={{ top: 8, right: 18, left: 44, bottom: 0 }}>
           <CartesianGrid stroke="#e5eaf1" horizontal={false} />
           <XAxis type="number" tick={{ fontSize: 10, fill: "#64748b" }} tickLine={false} axisLine={false} domain={[0, 100]} />
           <YAxis type="category" dataKey="name" tick={{ fontSize: 11, fill: "#334155" }} tickLine={false} axisLine={false} width={86} />
@@ -105,7 +104,7 @@ export function SectorStrengthChart({
             style={{ cursor: "pointer" }}
           />
         </BarChart>
-      </ResponsiveContainer>
+      )}
     </ChartContainer>
   );
 }
@@ -117,8 +116,8 @@ export function FundamentalTrendCharts({ data }: { data: FundamentalPoint[] }) {
         <div className="stat-label">PL推移</div>
         <p className="meaning-note">売上と営業利益の推移です。売上が伸び、営業利益率も上がるほど質の高い成長として見ます。</p>
         <ChartContainer className="h-56">
-          <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
-            <ComposedChart data={data} margin={{ top: 10, right: 8, left: -18, bottom: 0 }}>
+          {({ width, height }) => (
+            <ComposedChart width={width} height={height} data={data} margin={{ top: 10, right: 8, left: -18, bottom: 0 }}>
               <CartesianGrid stroke="#e5eaf1" vertical={false} />
               <XAxis dataKey="year" tick={{ fontSize: 11, fill: "#64748b" }} tickLine={false} axisLine={false} />
               <YAxis tick={{ fontSize: 10, fill: "#64748b" }} tickLine={false} axisLine={false} />
@@ -128,7 +127,7 @@ export function FundamentalTrendCharts({ data }: { data: FundamentalPoint[] }) {
               <Line dataKey="operatingIncome" name="営業利益" type="monotone" stroke="#059669" strokeWidth={2.5} dot={{ r: 3 }} />
               <Line dataKey="netIncome" name="純利益" type="monotone" stroke="#d97706" strokeWidth={2.2} dot={{ r: 3 }} />
             </ComposedChart>
-          </ResponsiveContainer>
+          )}
         </ChartContainer>
       </div>
 
@@ -136,8 +135,8 @@ export function FundamentalTrendCharts({ data }: { data: FundamentalPoint[] }) {
         <div className="stat-label">BS構成</div>
         <p className="meaning-note">総資産のうち自己資本と負債のバランスです。自己資本が厚いほど財務耐性が高い傾向です。</p>
         <ChartContainer className="h-52">
-          <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
-            <BarChart data={data} margin={{ top: 10, right: 8, left: -18, bottom: 0 }}>
+          {({ width, height }) => (
+            <BarChart width={width} height={height} data={data} margin={{ top: 10, right: 8, left: -18, bottom: 0 }}>
               <CartesianGrid stroke="#e5eaf1" vertical={false} />
               <XAxis dataKey="year" tick={{ fontSize: 11, fill: "#64748b" }} tickLine={false} axisLine={false} />
               <YAxis tick={{ fontSize: 10, fill: "#64748b" }} tickLine={false} axisLine={false} />
@@ -146,7 +145,7 @@ export function FundamentalTrendCharts({ data }: { data: FundamentalPoint[] }) {
               <Bar dataKey="equity" name="自己資本" stackId="bs" fill="#059669" radius={[0, 0, 0, 0]} />
               <Bar dataKey="liabilities" name="負債" stackId="bs" fill="#94a3b8" radius={[5, 5, 0, 0]} />
             </BarChart>
-          </ResponsiveContainer>
+          )}
         </ChartContainer>
       </div>
 
@@ -154,8 +153,8 @@ export function FundamentalTrendCharts({ data }: { data: FundamentalPoint[] }) {
         <div className="stat-label">収益性</div>
         <p className="meaning-note">ROEと営業利益率です。資本効率と本業の稼ぐ力を確認します。</p>
         <ChartContainer className="h-48">
-          <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
-            <ComposedChart data={data} margin={{ top: 10, right: 8, left: -18, bottom: 0 }}>
+          {({ width, height }) => (
+            <ComposedChart width={width} height={height} data={data} margin={{ top: 10, right: 8, left: -18, bottom: 0 }}>
               <CartesianGrid stroke="#e5eaf1" vertical={false} />
               <XAxis dataKey="year" tick={{ fontSize: 11, fill: "#64748b" }} tickLine={false} axisLine={false} />
               <YAxis tick={{ fontSize: 10, fill: "#64748b" }} tickLine={false} axisLine={false} />
@@ -164,7 +163,7 @@ export function FundamentalTrendCharts({ data }: { data: FundamentalPoint[] }) {
               <Line dataKey="roe" name="ROE" type="monotone" stroke="#0f766e" strokeWidth={2.5} dot={{ r: 3 }} />
               <Line dataKey="operatingMargin" name="営業利益率" type="monotone" stroke="#d97706" strokeWidth={2.5} dot={{ r: 3 }} />
             </ComposedChart>
-          </ResponsiveContainer>
+          )}
         </ChartContainer>
       </div>
     </div>
@@ -190,8 +189,8 @@ export function ScoreRiskScatter({
 
   return (
     <ChartContainer className="h-64">
-      <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
-        <ScatterChart margin={{ top: 10, right: 8, bottom: 4, left: -18 }}>
+      {({ width, height }) => (
+        <ScatterChart width={width} height={height} margin={{ top: 10, right: 8, bottom: 4, left: -18 }}>
           <CartesianGrid stroke="#e5eaf1" />
           <XAxis type="number" dataKey="final" name="最終スコア" domain={[0, 100]} tick={{ fontSize: 10, fill: "#64748b" }} tickLine={false} axisLine={false} label={{ value: "最終スコア", position: "insideBottom", offset: -2, fontSize: 11, fill: "#64748b" }} />
           <YAxis type="number" dataKey="risk" name="リスク制御" domain={[0, 100]} tick={{ fontSize: 10, fill: "#64748b" }} tickLine={false} axisLine={false} label={{ value: "リスク制御", angle: -90, position: "insideLeft", fontSize: 11, fill: "#64748b" }} />
@@ -229,7 +228,7 @@ export function ScoreRiskScatter({
             }}
           />
         </ScatterChart>
-      </ResponsiveContainer>
+      )}
     </ChartContainer>
   );
 }

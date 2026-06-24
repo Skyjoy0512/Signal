@@ -8,7 +8,8 @@ export function computeTradeScenario(params: {
   const strategy = choosePrimaryStrategy(params.strategyTags);
   const profile = strategyProfile(strategy);
   const entryPrice = snapshot.close;
-  const effectiveAtr = atr20 ?? snapshot.close * 0.02;
+  const atrSource = atr20 != null && atr20 > 0 ? "actual" : snapshot.close > 0 ? "estimated" : "unavailable";
+  const effectiveAtr: number = atr20 != null && atr20 > 0 ? atr20 : Math.max(1, snapshot.close * 0.02);
   const stopFromSwing = swingLow != null ? swingLow - 0.3 * effectiveAtr : null;
   const stopFromSma = snapshot.sma20 != null && snapshot.sma20 < entryPrice ? snapshot.sma20 - 0.4 * effectiveAtr : null;
   const stopFromAtr = entryPrice - profile.stopAtr * effectiveAtr;
@@ -25,11 +26,26 @@ export function computeTradeScenario(params: {
   const downside = entryPrice - stopPrice;
   const upsideBase = targetBase - entryPrice;
   const riskRewardBase = downside > 0 ? upsideBase / downside : 0;
+  const warnings = [
+    atrSource !== "actual" ? "ATR is estimated from close price; target and invalidation levels are lower confidence" : null,
+    swingHigh == null ? "swing high is unavailable; reference targets rely on ATR multiples" : null,
+    swingLow == null ? "swing low is unavailable; invalidation line relies on SMA/ATR fallback" : null,
+    targetBase > entryPrice + 4 * effectiveAtr ? "base target is more than 4 ATR from the entry reference" : null,
+  ].filter((warning): warning is string => warning != null);
+  const confidence = Math.max(20, Math.min(100, 95 - warnings.length * 15));
   return {
     entryPrice, stopPrice, targetConservative, targetBase, targetBull,
     upsideConservativePct: r2(upsideConservativePct), upsideBasePct: r2(upsideBasePct), upsideBullPct: r2(upsideBullPct),
     downsidePct: r2(downsidePct), riskRewardBase: r2(riskRewardBase),
-    expectedHoldingPeriod: profile.holdingPeriod, calculationMethod: `${effectiveAtr === atr20 ? "atr" : "atr_estimated"}_${strategy}_v2`,
+    expectedHoldingPeriod: profile.holdingPeriod,
+    calculationMethod: `${atrSource === "actual" ? "atr" : "atr_estimated"}_${strategy}_v2`,
+    scenarioQuality: {
+      atrSource,
+      swingHighSource: swingHigh != null ? "actual" : "missing",
+      swingLowSource: swingLow != null ? "actual" : "missing",
+      confidence,
+      warnings,
+    },
   };
 }
 function r2(n: number): number { return Math.round(n * 100) / 100; }

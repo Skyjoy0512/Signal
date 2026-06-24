@@ -34,11 +34,11 @@ export function detectSignal(input: SignalDetectorInput): SignalClassification {
   const gates = Object.fromEntries(gateDetails.map((gate) => [gate.key, gate.passed]));
 
   if (isForbidden) {
-    const reasons = [{ code: "forbidden_symbol", message: "forbidden symbol", severity: "blocker" as const }];
-    return buildClassification("avoid", "D", reasons, gates, gateDetails, scenario, "Forbidden");
+    const reasons = [{ code: "forbidden_symbol", message: "対象外銘柄のため見送り", severity: "blocker" as const }];
+    return buildClassification("avoid", "D", reasons, gates, gateDetails, scenario, "対象外銘柄");
   }
   if (dataConfidence < SIGNAL_THRESHOLDS.dataConfidenceMinimum) {
-    const reasons = [{ code: "low_data_confidence", message: `low data confidence (${dataConfidence})`, severity: "blocker" as const }];
+    const reasons = [{ code: "low_data_confidence", message: `データ不足のため候補度は低信頼 (${dataConfidence})`, severity: "blocker" as const }];
     return buildClassification("avoid", "D", reasons, gates, gateDetails, scenario);
   }
 
@@ -47,35 +47,35 @@ export function detectSignal(input: SignalDetectorInput): SignalClassification {
 
   if (scores.finalEntryScore >= SIGNAL_THRESHOLDS.finalStrongMinimum && scores.entryTimingScore >= SIGNAL_THRESHOLDS.entryTimingStrongMinimum && scores.convictionScore >= SIGNAL_THRESHOLDS.convictionStrongMinimum && scores.riskScore <= SIGNAL_THRESHOLDS.riskStrongMaximum && rrOk && dataConfidence >= SIGNAL_THRESHOLDS.dataConfidenceStrong && !eventBlockerActive) {
     action = "strong_entry_candidate"; tier = scores.finalEntryScore >= SIGNAL_THRESHOLDS.finalTierSMinimum ? "S" : "A";
-    reasons.push({ code: "strong_gates_passed", message: "all strong gates passed", severity: "info" });
+    reasons.push({ code: "strong_gates_passed", message: "主要ゲートをすべて通過。最優先でレビューする候補", severity: "info" });
   } else if (scores.finalEntryScore >= SIGNAL_THRESHOLDS.finalEntryMinimum && scores.entryTimingScore >= SIGNAL_THRESHOLDS.entryTimingMinimum && scores.convictionScore >= SIGNAL_THRESHOLDS.convictionMinimum && scores.riskScore <= SIGNAL_THRESHOLDS.riskEntryMaximum && rrOk && dataConfidence >= SIGNAL_THRESHOLDS.dataConfidenceEntry) {
     action = "entry_candidate"; tier = scores.finalEntryScore >= SIGNAL_THRESHOLDS.finalTierAMinimum ? "A" : "B";
-    reasons.push({ code: "entry_gates_passed", message: "entry gates passed", severity: "info" });
+    reasons.push({ code: "entry_gates_passed", message: "候補度は高いが、リスクと前提条件の追加確認が必要", severity: "info" });
   } else if (scores.finalEntryScore >= SIGNAL_THRESHOLDS.finalWatchMinimum && scores.riskScore <= SIGNAL_THRESHOLDS.riskWatchMaximum && rrOk) {
     action = "watch"; tier = scores.finalEntryScore >= SIGNAL_THRESHOLDS.finalTierBMinimum ? "B" : "C";
-    if (scores.entryTimingScore < SIGNAL_THRESHOLDS.entryTimingMinimum) reasons.push({ code: "entry_timing_weak", message: "entry timing weak", severity: "warning" });
-    if (dataConfidence < SIGNAL_THRESHOLDS.dataConfidenceEntry) reasons.push({ code: "data_confidence_borderline", message: "data confidence borderline", severity: "warning" });
-    if (!gates.eventBlockerGate) reasons.push({ code: "event_blocker_active", message: "event blocker active", severity: "blocker" });
+    if (scores.entryTimingScore < SIGNAL_THRESHOLDS.entryTimingMinimum) reasons.push({ code: "entry_timing_weak", message: "タイミング条件が弱いため監視に留める", severity: "warning" });
+    if (dataConfidence < SIGNAL_THRESHOLDS.dataConfidenceEntry) reasons.push({ code: "data_confidence_borderline", message: "データ信頼度が境界域のため追加確認が必要", severity: "warning" });
+    if (!gates.eventBlockerGate) reasons.push({ code: "event_blocker_active", message: "決算/イベント前後のため参考扱い", severity: "blocker" });
     reasons.push(...topWeakContributionReasons(scores, "warning"));
-    if (reasons.length === 0) reasons.push({ code: "below_entry_threshold", message: "below entry threshold", severity: "warning" });
+    if (reasons.length === 0) reasons.push({ code: "below_entry_threshold", message: "候補入りには一段不足しているため監視", severity: "warning" });
   } else {
-    if (scores.riskScore >= SIGNAL_THRESHOLDS.riskWatchMaximum) reasons.push({ code: "high_risk", message: "high risk", severity: "blocker" });
-    if (!rrOk) reasons.push({ code: "insufficient_risk_reward", message: "insufficient RR", severity: "blocker" });
-    if (!gates.eventBlockerGate) reasons.push({ code: "event_blocker_active", message: "event blocker active", severity: "blocker" });
+    if (scores.riskScore >= SIGNAL_THRESHOLDS.riskWatchMaximum) reasons.push({ code: "high_risk", message: "リスク確認が必要なため候補度を抑制", severity: "blocker" });
+    if (!rrOk) reasons.push({ code: "insufficient_risk_reward", message: "RRが不足しているため追加確認扱い", severity: "blocker" });
+    if (!gates.eventBlockerGate) reasons.push({ code: "event_blocker_active", message: "決算/イベント前後のため参考扱い", severity: "blocker" });
     reasons.push(...topWeakContributionReasons(scores, "blocker"));
-    if (reasons.length === 0) reasons.push({ code: "below_minimum_thresholds", message: "below minimum thresholds", severity: "warning" });
+    if (reasons.length === 0) reasons.push({ code: "below_minimum_thresholds", message: "最低条件を満たさないため見送り", severity: "warning" });
   }
   return buildClassification(action, tier, reasons, gates, gateDetails, scenario);
 }
 
 function topWeakContributionReasons(scores: ScoringOutput, severity: SignalDecisionReason["severity"]): SignalDecisionReason[] {
   return [...scores.contributions.risk, ...scores.contributions.entryTiming, ...scores.contributions.opportunity]
-    .filter((contribution) => contribution.polarity === "negative")
-    .sort((a, b) => b.contribution - a.contribution)
+    .filter((contribution) => contribution.signedImpact < 0)
+    .sort((a, b) => b.impactMagnitude - a.impactMagnitude)
     .slice(0, 2)
     .map((contribution) => ({
       code: `weak_${contribution.component}_${contribution.feature}`,
-      message: `${contribution.label}: ${contribution.reason}`,
+      message: `${contribution.label}が弱い: ${contribution.reason}`,
       severity,
     }));
 }
@@ -90,14 +90,14 @@ function buildGateDetails(input: {
 }): SignalGateDetail[] {
   const { scores, dataConfidence, eventBlockerActive, isForbidden, riskReward, rrOk } = input;
   return [
-    gate("finalEntryScoreGate", "Final entry score", scores.finalEntryScore >= SIGNAL_THRESHOLDS.finalWatchMinimum, scores.finalEntryScore, SIGNAL_THRESHOLDS.finalWatchMinimum, "warning", `final entry score is ${scores.finalEntryScore}`),
-    gate("entryTimingGate", "Entry timing", scores.entryTimingScore >= SIGNAL_THRESHOLDS.entryTimingMinimum, scores.entryTimingScore, SIGNAL_THRESHOLDS.entryTimingMinimum, "warning", `entry timing score is ${scores.entryTimingScore}`),
-    gate("convictionGate", "Conviction", scores.convictionScore >= SIGNAL_THRESHOLDS.convictionMinimum, scores.convictionScore, SIGNAL_THRESHOLDS.convictionMinimum, "warning", `conviction score is ${scores.convictionScore}`),
-    gate("riskGate", "Risk", scores.riskScore <= SIGNAL_THRESHOLDS.riskEntryMaximum, scores.riskScore, SIGNAL_THRESHOLDS.riskEntryMaximum, "blocker", `risk score is ${scores.riskScore}`),
-    gate("rrGate", "Risk/reward", rrOk, riskReward, SIGNAL_THRESHOLDS.riskRewardMinimum, "blocker", riskReward == null ? "risk/reward could not be computed" : `risk/reward is ${Math.round(riskReward * 100) / 100}`),
-    gate("dataConfidenceGate", "Data confidence", dataConfidence >= SIGNAL_THRESHOLDS.dataConfidenceMinimum, dataConfidence, SIGNAL_THRESHOLDS.dataConfidenceMinimum, "blocker", `data confidence is ${dataConfidence}`),
-    gate("eventBlockerGate", "Event blocker", !eventBlockerActive, eventBlockerActive, false, "blocker", eventBlockerActive ? "event blocker is active" : "no event blocker is active"),
-    gate("forbiddenGate", "Forbidden symbol", !isForbidden, isForbidden, false, "blocker", isForbidden ? "symbol is forbidden" : "symbol is allowed"),
+    gate("finalEntryScoreGate", "候補度", scores.finalEntryScore >= SIGNAL_THRESHOLDS.finalWatchMinimum, scores.finalEntryScore, SIGNAL_THRESHOLDS.finalWatchMinimum, "warning", `候補度スコア: ${scores.finalEntryScore}`),
+    gate("entryTimingGate", "タイミング", scores.entryTimingScore >= SIGNAL_THRESHOLDS.entryTimingMinimum, scores.entryTimingScore, SIGNAL_THRESHOLDS.entryTimingMinimum, "warning", `タイミングスコア: ${scores.entryTimingScore}`),
+    gate("convictionGate", "確信度", scores.convictionScore >= SIGNAL_THRESHOLDS.convictionMinimum, scores.convictionScore, SIGNAL_THRESHOLDS.convictionMinimum, "warning", `確信度スコア: ${scores.convictionScore}`),
+    gate("riskGate", "リスク", scores.riskScore <= SIGNAL_THRESHOLDS.riskEntryMaximum, scores.riskScore, SIGNAL_THRESHOLDS.riskEntryMaximum, "blocker", `リスクスコア: ${scores.riskScore}`),
+    gate("rrGate", "RR", rrOk, riskReward, SIGNAL_THRESHOLDS.riskRewardMinimum, "blocker", riskReward == null ? "RRを算出できません" : `RR: ${Math.round(riskReward * 100) / 100}`),
+    gate("dataConfidenceGate", "データ信頼度", dataConfidence >= SIGNAL_THRESHOLDS.dataConfidenceMinimum, dataConfidence, SIGNAL_THRESHOLDS.dataConfidenceMinimum, "blocker", `データ信頼度: ${dataConfidence}`),
+    gate("eventBlockerGate", "イベント", !eventBlockerActive, eventBlockerActive, false, "blocker", eventBlockerActive ? "決算/イベントブロッカーあり" : "イベントブロッカーなし"),
+    gate("forbiddenGate", "対象外銘柄", !isForbidden, isForbidden, false, "blocker", isForbidden ? "対象外銘柄です" : "対象銘柄です"),
   ];
 }
 

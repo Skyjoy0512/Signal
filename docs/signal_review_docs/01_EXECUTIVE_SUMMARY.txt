@@ -1,0 +1,63 @@
+01 Executive Summary
+====================
+
+重要結論
+--------
+
+Signalは、個人投資家が候補銘柄をレビューし、ストーリーラインを整理し、判断前の確認を支援するアプリとして、方向性は良い。
+
+現行構成では、Next.js App Router、UI components、scoring、analysis、LLM、storylines、jobs、Supabase repository が分かれており、分析ロジックとLLMプロバイダーを分離したいという設計思想に沿った土台はある。
+
+ただし、最初に直すべき重大問題がある。
+
+最重要問題:
+1. finalEntryScore が構造的に上振れしている。
+2. LLM補正後の最終スコアが一部の安全capを迂回している。
+3. ChartContainerの直近差分方針と現行実装が一致していない。
+4. API settings/job系routeの認可・入力検証が弱い。
+5. 履歴分析・outcome評価のためのDB設計がまだ不足している。
+
+最優先で直すべきこと
+--------------------
+
+P0-1: finalEntryScore の算出式を修正する。
+現在の式は symbolScore * 0.50 + 50 を含み、ニュートラルな銘柄でも高スコアになりやすい。これは候補判定、UI表示、LLMレビュー、ストーリーライン生成すべての信頼性に影響する。
+
+P0-2: LLM補正後にも全final score capを再適用する。
+LLMはレビュー品質を高めるために使うべきだが、低データ信頼度、イベントブロッカー、弱気市場、禁止銘柄などのhard guardrailはルールベース側で必ず守る。
+
+P1-1: ChartContainerの設計を一本化する。
+ResizeObserverで実測width/heightを子チャートへ渡す設計にするなら、ResponsiveContainerを完全に廃止する。中間状態は避ける。
+
+P1-2/P1-3: API routesに認可と入力検証を追加する。
+個人利用でも、LLM APIキー保存、LLM疎通テスト、daily scan、external pack生成は外部から叩かれないようにする。
+
+設計方針
+--------
+
+1. ルールベースが最終安全柵を持つ。
+   LLMはレビュー、反証、リスク指摘、scenario妥当性確認に使う。最終score capやhard blockerの突破は許可しない。
+
+2. LLMプロバイダー層と分析ロジック層を分離する。
+   src/lib/llm は provider, prompt, schema, repair, run logging を担当し、src/lib/scoring や src/lib/analysis は投資分析のdomain logicを担当する。
+
+3. UIは投資助言に見えない表現にする。
+   Strong Entry, 買い候補, Entry, 損切, 目標 のような表現は、レビュー候補、候補度、想定エントリー水準、無効化ライン、参考ターゲットへ寄せる。
+
+4. 履歴を保存して改善できる構造にする。
+   score_snapshots, storyline_sets だけでなく、price_observations, signal_outcomes, storyline_outcomes, user_decisions, review_events を追加する。
+
+5. 一気に作り直さない。
+   現在の構造を活かし、P0/P1/P2/P3の小さなPR単位で改善する。
+
+推奨PR順
+--------
+
+PR-1: finalEntryScore 修正
+PR-2: LLM補正後のcap完全適用
+PR-3: ChartContainer render-props化またはResponsiveContainer継続への設計統一
+PR-4: API認可・入力検証・error response共通化
+PR-5: AnalysisInputSnapshotV1追加
+PR-6: DB outcome/history拡張
+PR-7: UI文言の投資助言リスク低減
+PR-8: Review Queue / Watchlist / Event alert の段階実装

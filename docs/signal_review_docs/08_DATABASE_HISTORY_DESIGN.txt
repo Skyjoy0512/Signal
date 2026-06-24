@@ -1,0 +1,281 @@
+08 Database / History Design Improvements
+=========================================
+
+目的
+----
+
+将来、過去の予測・ストーリーラインと実際の価格推移を比較し、分析ロジックを改善できるようにする。
+
+現状の主要テーブル:
+- symbols
+- financial_statements
+- market_metrics
+- analysis_runs
+- score_snapshots
+- llm_settings
+- storyline_sets
+- storyline_scenarios
+- universe_members
+
+不足しているもの:
+- 実価格推移の観測
+- signal outcome
+- storyline outcome
+- user decision
+- review event
+- data quality history
+- LLM run detailsのversion/provenance
+
+
+DB-1: price_observations
+-----------------------
+
+目的:
+分析後の実価格推移を保存する。
+
+カラム案:
+- id uuid primary key
+- symbol_id uuid references symbols(id)
+- symbol text not null
+- observed_at timestamptz not null
+- timeframe text not null  -- daily, weekly, intradayなど
+- open numeric
+- high numeric
+- low numeric
+- close numeric
+- adjusted_close numeric
+- volume numeric
+- source text not null
+- source_as_of timestamptz
+- raw_json jsonb
+- created_at timestamptz default now()
+
+index:
+- (symbol_id, timeframe, observed_at)
+- (symbol, timeframe, observed_at)
+
+unique:
+- (symbol_id, timeframe, observed_at, source)
+
+
+DB-2: signal_outcomes
+--------------------
+
+目的:
+score snapshotやsignalが、その後どうなったかを評価する。
+
+カラム案:
+- id uuid primary key
+- score_snapshot_id uuid references score_snapshots(id)
+- analysis_run_id uuid references analysis_runs(id)
+- symbol_id uuid references symbols(id)
+- horizon text not null  -- 1w, 1m, 3mなど
+- entry_reference_price numeric
+- price_at_horizon numeric
+- max_favorable_excursion_pct numeric
+- max_adverse_excursion_pct numeric
+- return_pct numeric
+- benchmark_return_pct numeric
+- excess_return_pct numeric
+- hit_target_base boolean
+- hit_stop boolean
+- rr_realized numeric
+- outcome_label text
+- evaluated_at timestamptz
+- created_at timestamptz default now()
+
+outcome_label例:
+- target_hit
+- stop_hit
+- neutral
+- underperformed
+- data_unavailable
+
+
+DB-3: storyline_outcomes
+-----------------------
+
+目的:
+Best/Base/Conservative/Worstのどれに近かったかを後から評価する。
+
+カラム案:
+- id uuid primary key
+- storyline_set_id uuid references storyline_sets(id)
+- storyline_scenario_id uuid references storyline_scenarios(id)
+- symbol_id uuid references symbols(id)
+- scenario_kind text not null
+- horizon text not null
+- target_price numeric
+- stop_price numeric
+- actual_close numeric
+- actual_high numeric
+- actual_low numeric
+- scenario_hit boolean
+- distance_to_target_pct numeric
+- distance_to_stop_pct numeric
+- review_comment text
+- evaluated_at timestamptz
+- created_at timestamptz default now()
+
+
+DB-4: storyline_revisions
+------------------------
+
+目的:
+ストーリーラインがどう改訂されたかを分析可能にする。
+
+カラム案:
+- id uuid primary key
+- previous_storyline_set_id uuid references storyline_sets(id)
+- new_storyline_set_id uuid references storyline_sets(id)
+- symbol_id uuid references symbols(id)
+- revision_type text
+- from_active_scenario text
+- to_active_scenario text
+- score_delta_json jsonb
+- reason_codes_json jsonb
+- created_at timestamptz default now()
+
+revision_type例:
+- risk_worsened
+- score_improved
+- event_blocker_added
+- target_revised
+- stop_revised
+- data_quality_changed
+
+
+DB-5: user_decisions
+-------------------
+
+目的:
+アプリが出した候補に対して、ユーザーがどう判断したかを保存する。
+
+カラム案:
+- id uuid primary key
+- score_snapshot_id uuid references score_snapshots(id)
+- storyline_set_id uuid references storyline_sets(id)
+- symbol_id uuid references symbols(id)
+- decision text not null
+- decision_reason text
+- planned_entry_price numeric
+- planned_stop_price numeric
+- position_size_note text
+- created_at timestamptz default now()
+
+決定値例:
+- reviewed
+- watch
+- entered
+- skipped
+- rejected
+- deferred
+
+注意:
+売買自動執行ではない。ユーザーの判断記録として扱う。
+
+
+DB-6: review_events
+------------------
+
+目的:
+Review Queueや通知の履歴を残す。
+
+カラム案:
+- id uuid primary key
+- symbol_id uuid references symbols(id)
+- score_snapshot_id uuid references score_snapshots(id)
+- storyline_set_id uuid references storyline_sets(id)
+- event_type text not null
+- severity text not null
+- title text not null
+- details_json jsonb
+- resolved_at timestamptz
+- created_at timestamptz default now()
+
+イベント例:
+- score_changed
+- risk_worsened
+- event_blocker_added
+- target_approached
+- stop_approached
+- storyline_revised
+- data_confidence_dropped
+
+
+DB-7: data_quality_observations
+------------------------------
+
+目的:
+分析時点のデータ信頼度を保存する。
+
+カラム案:
+- id uuid primary key
+- analysis_run_id uuid references analysis_runs(id)
+- symbol_id uuid references symbols(id)
+- source text
+- dataset text
+- as_of timestamptz
+- freshness_hours numeric
+- missing_fields_json jsonb
+- confidence_score numeric
+- reason_json jsonb
+- created_at timestamptz default now()
+
+
+既存テーブルへの追加カラム
+------------------------
+
+analysis_runs:
+- engine_version
+- scoring_config_version
+- feature_schema_version
+- prompt_version
+- llm_schema_version
+- universe_type
+- data_source_summary_json
+
+score_snapshots:
+- score_engine_version
+- scoring_config_version
+- feature_snapshot_id
+- market_data_as_of
+- scenario_quality_json
+- feature_availability_json
+- score_calibration_version
+
+storyline_sets:
+- storyline_engine_version
+- scenario_probability_method
+- input_score_snapshot_id
+- llm_run_id
+- data_quality_json
+
+llm_settings:
+- encryption_key_version
+- allowed_base_url
+- last_tested_at
+- last_test_status
+
+
+RLS方針
+-------
+
+初期:
+- enable row level security
+- service_role policyのみ
+
+将来multi-user化:
+- owner_user_id追加
+- auth.uid() = owner_user_id policy追加
+
+
+outcome評価時の注意
+------------------
+
+- lookahead biasを避ける。
+- score_snapshot時点で存在しないデータを使わない。
+- universe変更を記録する。
+- stock splitやadjusted priceを扱う。
+- benchmark returnを保存する。
+- delisted/suspended銘柄を除外しない。

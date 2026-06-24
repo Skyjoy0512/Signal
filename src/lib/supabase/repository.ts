@@ -1,5 +1,23 @@
 import { createClient } from "./server";
-import type { Symbol, ForbiddenSymbol, MarketSnapshot, LayerCondition, Signal, LlmRun, AnalysisRun, ScoreSnapshot, StorylineScenarioRow, StorylineSetRow } from "./types";
+import type {
+  Symbol,
+  ForbiddenSymbol,
+  MarketSnapshot,
+  LayerCondition,
+  Signal,
+  LlmRun,
+  AnalysisRun,
+  ScoreSnapshot,
+  StorylineScenarioRow,
+  StorylineSetRow,
+  PriceObservation,
+  SignalOutcome,
+  StorylineOutcome,
+  StorylineRevision,
+  UserDecision,
+  ReviewEvent,
+  DataQualityObservation,
+} from "./types";
 
 type MarketSnapshotPartial = Partial<MarketSnapshot> & { symbol_id: string; timeframe: string; captured_at: string; data_confidence: number };
 
@@ -119,6 +137,127 @@ export async function insertStorylineScenarios(input: Array<Omit<StorylineScenar
   const supabase = await createClient();
   const { error } = await supabase.from("storyline_scenarios").insert(input);
   if (error) throw new Error(`insertStorylineScenarios: ${error.message}`);
+}
+
+export async function insertPriceObservation(input: Omit<PriceObservation, "id" | "created_at">): Promise<PriceObservation> {
+  const supabase = await createClient();
+  const { data, error } = await supabase.from("price_observations").upsert(input, { onConflict: "symbol_id,timeframe,observed_at,source" }).select().single();
+  if (error) throw new Error(`insertPriceObservation: ${error.message}`);
+  return data as PriceObservation;
+}
+
+export async function getPriceObservations(input: { symbol: string; timeframe?: string; limit?: number }): Promise<PriceObservation[]> {
+  const supabase = await createClient();
+  let query = supabase.from("price_observations").select("*").eq("symbol", input.symbol).order("observed_at", { ascending: false }).limit(input.limit ?? 100);
+  if (input.timeframe) query = query.eq("timeframe", input.timeframe);
+  const { data, error } = await query;
+  if (error) throw new Error(`getPriceObservations: ${error.message}`);
+  return (data ?? []) as PriceObservation[];
+}
+
+export async function insertSignalOutcome(input: Omit<SignalOutcome, "id" | "created_at">): Promise<SignalOutcome> {
+  const supabase = await createClient();
+  const { data, error } = await supabase.from("signal_outcomes").insert(input).select().single();
+  if (error) throw new Error(`insertSignalOutcome: ${error.message}`);
+  return data as SignalOutcome;
+}
+
+export async function getSignalOutcomes(input: { scoreSnapshotId?: string; analysisRunId?: string; symbolId?: string; horizon?: string; limit?: number } = {}): Promise<SignalOutcome[]> {
+  const supabase = await createClient();
+  let query = supabase.from("signal_outcomes").select("*").order("created_at", { ascending: false }).limit(input.limit ?? 100);
+  if (input.scoreSnapshotId) query = query.eq("score_snapshot_id", input.scoreSnapshotId);
+  if (input.analysisRunId) query = query.eq("analysis_run_id", input.analysisRunId);
+  if (input.symbolId) query = query.eq("symbol_id", input.symbolId);
+  if (input.horizon) query = query.eq("horizon", input.horizon);
+  const { data, error } = await query;
+  if (error) throw new Error(`getSignalOutcomes: ${error.message}`);
+  return (data ?? []) as SignalOutcome[];
+}
+
+export async function insertStorylineOutcome(input: Omit<StorylineOutcome, "id" | "created_at">): Promise<StorylineOutcome> {
+  const supabase = await createClient();
+  const { data, error } = await supabase.from("storyline_outcomes").insert(input).select().single();
+  if (error) throw new Error(`insertStorylineOutcome: ${error.message}`);
+  return data as StorylineOutcome;
+}
+
+export async function getStorylineOutcomes(input: { storylineSetId?: string; symbolId?: string; horizon?: string; limit?: number } = {}): Promise<StorylineOutcome[]> {
+  const supabase = await createClient();
+  let query = supabase.from("storyline_outcomes").select("*").order("created_at", { ascending: false }).limit(input.limit ?? 100);
+  if (input.storylineSetId) query = query.eq("storyline_set_id", input.storylineSetId);
+  if (input.symbolId) query = query.eq("symbol_id", input.symbolId);
+  if (input.horizon) query = query.eq("horizon", input.horizon);
+  const { data, error } = await query;
+  if (error) throw new Error(`getStorylineOutcomes: ${error.message}`);
+  return (data ?? []) as StorylineOutcome[];
+}
+
+export async function insertStorylineRevision(input: Omit<StorylineRevision, "id" | "created_at">): Promise<StorylineRevision> {
+  const supabase = await createClient();
+  const { data, error } = await supabase.from("storyline_revisions").insert(input).select().single();
+  if (error) throw new Error(`insertStorylineRevision: ${error.message}`);
+  return data as StorylineRevision;
+}
+
+export async function getStorylineRevisions(input: { symbolId?: string; limit?: number } = {}): Promise<StorylineRevision[]> {
+  const supabase = await createClient();
+  let query = supabase.from("storyline_revisions").select("*").order("created_at", { ascending: false }).limit(input.limit ?? 100);
+  if (input.symbolId) query = query.eq("symbol_id", input.symbolId);
+  const { data, error } = await query;
+  if (error) throw new Error(`getStorylineRevisions: ${error.message}`);
+  return (data ?? []) as StorylineRevision[];
+}
+
+export async function insertUserDecision(input: Omit<UserDecision, "id" | "created_at">): Promise<UserDecision> {
+  const supabase = await createClient();
+  const { data, error } = await supabase.from("user_decisions").insert(input).select().single();
+  if (error) throw new Error(`insertUserDecision: ${error.message}`);
+  return data as UserDecision;
+}
+
+export async function getUserDecisions(input: { symbolId?: string; scoreSnapshotId?: string; limit?: number } = {}): Promise<UserDecision[]> {
+  const supabase = await createClient();
+  let query = supabase.from("user_decisions").select("*").order("created_at", { ascending: false }).limit(input.limit ?? 100);
+  if (input.symbolId) query = query.eq("symbol_id", input.symbolId);
+  if (input.scoreSnapshotId) query = query.eq("score_snapshot_id", input.scoreSnapshotId);
+  const { data, error } = await query;
+  if (error) throw new Error(`getUserDecisions: ${error.message}`);
+  return (data ?? []) as UserDecision[];
+}
+
+export async function insertReviewEvent(input: Omit<ReviewEvent, "id" | "created_at">): Promise<ReviewEvent> {
+  const supabase = await createClient();
+  const { data, error } = await supabase.from("review_events").insert(input).select().single();
+  if (error) throw new Error(`insertReviewEvent: ${error.message}`);
+  return data as ReviewEvent;
+}
+
+export async function getReviewEvents(input: { symbolId?: string; eventType?: string; unresolvedOnly?: boolean; limit?: number } = {}): Promise<ReviewEvent[]> {
+  const supabase = await createClient();
+  let query = supabase.from("review_events").select("*").order("created_at", { ascending: false }).limit(input.limit ?? 100);
+  if (input.symbolId) query = query.eq("symbol_id", input.symbolId);
+  if (input.eventType) query = query.eq("event_type", input.eventType);
+  if (input.unresolvedOnly) query = query.is("resolved_at", null);
+  const { data, error } = await query;
+  if (error) throw new Error(`getReviewEvents: ${error.message}`);
+  return (data ?? []) as ReviewEvent[];
+}
+
+export async function insertDataQualityObservation(input: Omit<DataQualityObservation, "id" | "created_at">): Promise<DataQualityObservation> {
+  const supabase = await createClient();
+  const { data, error } = await supabase.from("data_quality_observations").insert(input).select().single();
+  if (error) throw new Error(`insertDataQualityObservation: ${error.message}`);
+  return data as DataQualityObservation;
+}
+
+export async function getDataQualityObservations(input: { symbolId?: string; dataset?: string; limit?: number } = {}): Promise<DataQualityObservation[]> {
+  const supabase = await createClient();
+  let query = supabase.from("data_quality_observations").select("*").order("as_of", { ascending: false }).limit(input.limit ?? 100);
+  if (input.symbolId) query = query.eq("symbol_id", input.symbolId);
+  if (input.dataset) query = query.eq("dataset", input.dataset);
+  const { data, error } = await query;
+  if (error) throw new Error(`getDataQualityObservations: ${error.message}`);
+  return (data ?? []) as DataQualityObservation[];
 }
 
 function scenarioOrder(kind: string): number {

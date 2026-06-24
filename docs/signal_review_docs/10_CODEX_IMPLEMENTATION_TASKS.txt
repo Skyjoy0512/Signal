@@ -1,0 +1,367 @@
+10 Concrete Implementation Instructions for Codex
+=================================================
+
+このファイルはCodexに直接渡すための実装指示です。
+各タスクはP0/P1/P2/P3に分けています。
+まずP0だけを実装し、typecheck/test/lint/buildを通してください。
+
+
+P0-1: finalEntryScore の上振れ修正
+----------------------------------
+
+対象ファイル:
+- src/lib/scoring/scoring-engine.ts
+- src/lib/scoring/scoring.test.ts
+
+現在の問題:
+computeFinalEntryScore と computeFinalEntryScoreUncapped が symbolScore * 0.50 + 50 のような構造になっており、中立symbolScoreでもfinalEntryScoreが高くなる。
+
+変更内容:
+1. computeFinalEntryScoreUncappedを以下方針へ変更する。
+
+  function computeFinalEntryScoreUncapped(symbolScore: number, input: ScoringInput): number {
+    const marketAdjustment = marketScoreAdjustment(input.market);
+    const sectorAdjustment = sectorScoreAdjustment(input.sector);
+    return clamp(symbolScore + marketAdjustment + sectorAdjustment);
+  }
+
+2. computeFinalEntryScoreはuncapped値にapplyFinalScoreCapsを適用する。
+
+  function computeFinalEntryScore(symbolScore: number, input: ScoringInput, riskScore: number): number {
+    return applyFinalScoreCaps(computeFinalEntryScoreUncapped(symbolScore, input), input, riskScore);
+  }
+
+3. marketScoreAdjustment / sectorScoreAdjustment を小関数化する。
+4. 既存thresholdやcap定数は変更しない。
+
+受け入れ条件:
+- neutral fixtureでfinalEntryScoreが45-55。
+- weak fixtureがentry thresholdを超えない。
+- bullish market/sectorで軽く加点される。
+- bearish market/sectorで減点される。
+- forbidden/data/event/bearish capsは維持。
+
+追加/更新テスト:
+- neutral components stay neutral
+- weak symbol does not become entry candidate
+- bullish market adjusts but does not dominate
+- bearish market cap applies
+
+
+P0-2: LLM補正後にも全final score capを適用
+----------------------------------------
+
+対象ファイル:
+- src/lib/scoring/scoring-engine.ts
+- src/lib/analysis/llm-enhancer.ts
+- src/lib/scoring/scoring.test.ts
+- src/lib/analysis/analysis.test.ts
+
+現在の問題:
+applyLlmAdjustmentがriskOnlyFinalCapのみを使っており、low data, event blocker, bearish market, forbidden capを再適用しない可能性がある。
+
+変更内容:
+1. applyLlmAdjustmentのsignatureを変更する。
+
+  export function applyLlmAdjustment(
+    scores: ScoringOutput,
+    adj: LlmScoreAdjustment,
+    input: ScoringInput,
+  ): ScoringOutput
+
+2. LLM補正後のsymbolScoreを使い、finalEntryScoreを以下で再計算する。
+
+  u.finalEntryScore = computeFinalEntryScore(symbolScore, input, u.riskScore);
+
+3. src/lib/analysis/llm-enhancer.tsの呼び出し元を修正する。
+
+  const scores = applyLlmAdjustment(logic.scores, adjustment, logic.scoringInput);
+
+4. riskOnlyFinalCapを削除する。
+
+受け入れ条件:
+- low data時、LLM最大加点後もlowDataConfidence cap以下。
+- event blocker時、LLM最大加点後もeventBlocker cap以下。
+- bearish market時、LLM最大加点後もbearishMarket cap以下。
+- forbidden時、LLM最大加点後もforbidden cap以下。
+
+追加/更新テスト:
+- optimistic LLM adjustment cannot bypass low data cap
+- optimistic LLM adjustment cannot bypass event blocker cap
+- optimistic LLM adjustment cannot bypass bearish market cap
+- optimistic LLM adjustment cannot bypass forbidden cap
+
+
+P1-1: ChartContainerをrender-props化しResponsiveContainerを削除
+-------------------------------------------------------------
+
+対象ファイル:
+- src/components/ui/chart.tsx
+- src/components/candidate-visuals.tsx
+- src/components/fundamental-visuals.tsx
+
+現在の問題:
+ChartContainerはResizeObserverでready判定しているが、width/heightを子に渡していない。利用側にはResponsiveContainerが残っている。
+
+変更内容:
+1. ChartContainer APIを以下に変更する。
+
+  type ChartSize = { width: number; height: number };
+
+  export function ChartContainer({
+    className,
+    children,
+  }: {
+    className?: string;
+    children: (size: ChartSize) => React.ReactNode;
+  })
+
+2. ResizeObserverでcontentRect.width/heightをstateに保存する。
+3. width <= 0 または height <= 0 の間はplaceholderまたはnullを返す。
+4. candidate-visuals.tsxからResponsiveContainer importを削除。
+5. fundamental-visuals.tsxからResponsiveContainer importを削除。
+6. Rechartsの各chartへ width={width} height={height} を渡す。
+
+受け入れ条件:
+- ResponsiveContainer importが0件。
+- chartが描画される。
+- resize時にchartが追従する。
+- width/height=0でクラッシュしない。
+
+追加/更新テスト:
+- ResizeObserver mock
+- measured size passed to children
+- zero size does not crash
+
+
+P1-2: API routeの簡易認可を追加
+------------------------------
+
+対象ファイル:
+- 新規: src/lib/api/auth.ts
+- 新規: src/lib/api/response.ts
+- src/app/api/settings/llm/route.ts
+- src/app/api/settings/llm/test/route.ts
+- src/app/api/jobs/daily-scan/route.ts
+- src/app/api/external-pack/route.ts
+
+現在の問題:
+個人利用でも、LLM APIキー保存、LLM疎通、daily scan、external pack生成は保護が必要。
+
+変更内容:
+1. src/lib/api/auth.ts に requireAdminRequest(req: Request) を追加。
+2. APP_ADMIN_TOKEN が設定されている場合、以下のいずれかを要求する。
+   - Authorization: Bearer <token>
+   - x-signal-admin-token: <token>
+3. productionでAPP_ADMIN_TOKEN未設定なら認可失敗。
+4. settings GET/POST, settings test POST, daily-scan POST, external-pack POST に適用。
+5. src/lib/api/response.ts に ok/error helperを追加。
+
+受け入れ条件:
+- tokenなしで401。
+- tokenありで成功。
+- error response shapeが統一される。
+
+追加/更新テスト:
+- unauthorized request returns 401
+- authorized request succeeds
+- production missing token fails
+
+
+P1-3: LLM settings入力検証強化
+-----------------------------
+
+対象ファイル:
+- src/app/api/settings/llm/route.ts
+- src/lib/llm/settings.ts
+
+現在の問題:
+provider, baseUrl, temperature, costなどの検証が弱い。
+
+変更内容:
+- providerはdeepseek/openai-compatibleのみ。
+- modelは空不可、最大100文字。
+- temperatureは0以上1.5以下。
+- dailyCostLimitUsd/monthlyBudgetUsdは0以上。
+- baseUrlはhttps必須。
+- localhost/private IP/metadata addressは禁止。
+- productionではAPP_SETTINGS_ENCRYPTION_KEY必須。
+
+受け入れ条件:
+- invalid provider -> 400
+- invalid temperature -> 400
+- localhost baseUrl -> 400
+- private IP baseUrl -> 400
+- valid input -> save succeeds
+
+追加/更新テスト:
+- invalid provider
+- invalid baseUrl
+- negative cost
+- too high temperature
+- empty model
+
+
+P1-4: AnalysisInputSnapshotV1を追加
+----------------------------------
+
+対象ファイル:
+- src/lib/analysis/types.ts
+- src/lib/analysis/llm-enhancer.ts
+- src/lib/llm/types.ts
+- src/lib/jobs/daily-scan.ts
+
+現在の問題:
+LLM入力とscore snapshotにversion/provenance/quality情報が不足している。
+
+変更内容:
+AnalysisInputSnapshotV1を追加する。
+
+  export interface AnalysisInputSnapshotV1 {
+    schemaVersion: 'analysis-input-v1';
+    scoreEngineVersion: string;
+    scoringConfigVersion: string;
+    capturedAt: string;
+    symbol: string;
+    symbolName?: string;
+    marketDataAsOf?: string;
+    dataSources: Array<{ name: string; asOf?: string; confidence?: number }>;
+    features: {
+      technical: unknown;
+      fundamentals?: unknown;
+      layers: unknown;
+      events?: unknown;
+    };
+    featureAvailability: Record<string, boolean>;
+    scenarioQuality?: {
+      atrSource: 'actual' | 'estimated' | 'unavailable';
+      confidence: number;
+      warnings: string[];
+    };
+  }
+
+受け入れ条件:
+- LLM inputにschemaVersionが入る。
+- score snapshot保存時にversion情報が入る。
+- 欠損featureがfeatureAvailability=falseになる。
+
+追加/更新テスト:
+- build snapshot includes schemaVersion
+- build snapshot includes featureAvailability
+- scenarioQuality included when scenario exists
+
+
+P2-1: Outcome DB migrationを追加
+-------------------------------
+
+対象ファイル:
+- 新規: supabase/migrations/0007_analysis_outcomes.sql
+- src/lib/supabase/types.ts
+- src/lib/supabase/repository.ts
+
+現在の問題:
+将来の検証に必要な価格観測・outcome・user decision・review eventが不足。
+
+変更内容:
+以下テーブルを追加する。
+- price_observations
+- signal_outcomes
+- storyline_outcomes
+- storyline_revisions
+- user_decisions
+- review_events
+- data_quality_observations
+
+受け入れ条件:
+- RLS enabled。
+- service_role policyあり。
+- symbol/date/horizon indexあり。
+- repositoryにinsert/select関数あり。
+
+追加/更新テスト:
+- repository insert/select mapping tests
+
+
+P2-2: Storyline probability normalization
+----------------------------------------
+
+対象ファイル:
+- src/lib/storylines/engine.ts
+- src/lib/storylines/types.ts
+- src/lib/storylines/storylines.test.ts
+
+現在の問題:
+Best/Base/Conservative/Worstの確率が合計100になる保証がない。
+
+変更内容:
+- raw weightを計算。
+- 合計100にnormalize。
+- probabilityMethodをStorylineSetに追加。
+
+受け入れ条件:
+- 4シナリオ合計が100。
+- activeScenarioと確率傾向が矛盾しない。
+
+追加/更新テスト:
+- probabilities sum to 100
+- low data reduces optimistic scenario
+- event blocker increases conservative/worst scenario
+
+
+P2-3: ScoreContributionにsignedImpactを追加
+------------------------------------------
+
+対象ファイル:
+- src/lib/scoring/types.ts
+- src/lib/scoring/scoring-engine.ts
+- src/lib/scoring/signal-detector.ts
+- src/lib/scoring/scoring.test.ts
+
+現在の問題:
+negative reason抽出がcontributionの意味とずれている。
+
+変更内容:
+ScoreContributionに追加。
+
+  signedImpact: number;
+  impactMagnitude: number;
+
+risk系やhighIsGood=falseのfeatureではsignedImpactを負方向に扱う。
+topWeakContributionReasonsはimpactMagnitudeでsortする。
+
+受け入れ条件:
+- risk高のfeatureがweak reason上位に出る。
+- LLM inputにsignedImpactが含まれる。
+
+追加/更新テスト:
+- risk contribution sorted as weak reason
+- positive contribution not included as weak reason
+
+
+P3-1: UI文言の投資助言リスク低減
+--------------------------------
+
+対象ファイル:
+- src/components/signal-card.tsx
+- src/lib/market-display.ts
+- src/app/candidates/page.tsx
+- src/app/dashboard/page.tsx
+
+現在の問題:
+Strong Entry, Entry候補, 買い候補, 損切, 目標など、投資推奨に見えやすい文言がある。
+
+変更内容:
+- Strong Entry -> 最優先レビュー候補
+- Entry候補 -> 追加確認候補
+- 買い候補 -> 候補度
+- Entry -> 想定エントリー水準
+- 損切 -> 無効化ライン
+- 目標 -> 参考ターゲット
+- 共通注記を追加。
+
+受け入れ条件:
+- UI主要文言が売買推奨に見えない。
+- 注記がDashboard/Candidates/Reviewに表示される。
+
+追加/更新テスト:
+- render text does not include Strong Entry/買い推奨/強い買い

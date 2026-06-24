@@ -1,0 +1,209 @@
+05 Refactoring Plan
+===================
+
+目的
+----
+
+大規模な作り直しではなく、現行実装を活かして段階的に改善する。
+各PRは小さく、テスト可能で、rollbackしやすい単位にする。
+
+
+PR-1: finalEntryScoreキャリブレーション修正
+-----------------------------------------
+
+優先度: P0
+対象:
+- src/lib/scoring/scoring-engine.ts
+- src/lib/scoring/scoring.test.ts
+
+内容:
+- symbolScore * 0.50 + 50 の構造を削除。
+- final = clamp(symbolScore + marketAdjustment + sectorAdjustment) に変更。
+- applyFinalScoreCapsは維持。
+- 中立fixtureを追加。
+
+完了条件:
+- 中立入力でfinal 45-55。
+- 弱い銘柄がentry thresholdを超えない。
+- 既存テスト、typecheck、lint、buildが通る。
+
+
+PR-2: LLM補正後のfinal score cap完全適用
+--------------------------------------
+
+優先度: P0
+対象:
+- src/lib/scoring/scoring-engine.ts
+- src/lib/analysis/llm-enhancer.ts
+- src/lib/scoring/scoring.test.ts
+- src/lib/analysis/analysis.test.ts
+
+内容:
+- applyLlmAdjustment(scores, adj, input) に変更。
+- computeFinalEntryScore(symbolScore, input, riskScore) を再利用。
+- riskOnlyFinalCapを削除。
+- low data, event blocker, bearish, forbidden の回帰テスト追加。
+
+完了条件:
+- LLM最大加点でもhard capを突破しない。
+
+
+PR-3: ChartContainer設計統一
+---------------------------
+
+優先度: P1
+対象:
+- src/components/ui/chart.tsx
+- src/components/candidate-visuals.tsx
+- src/components/fundamental-visuals.tsx
+
+内容:
+- 方針A: render-props化して実測width/heightを渡す。
+- ResponsiveContainerを削除。
+- ResizeObserver mock testを追加。
+
+完了条件:
+- ResponsiveContainer importが0件。
+- chartがresizeに追従。
+- width/height=0でクラッシュしない。
+
+
+PR-4: API認可とエラーresponse共通化
+----------------------------------
+
+優先度: P1
+対象:
+- src/lib/api/auth.ts
+- src/lib/api/response.ts
+- src/app/api/settings/llm/route.ts
+- src/app/api/settings/llm/test/route.ts
+- src/app/api/jobs/daily-scan/route.ts
+- src/app/api/external-pack/route.ts
+
+内容:
+- requireAdminRequest(req)追加。
+- ok/error response helper追加。
+- settings/job/external-pack POSTを保護。
+- settings GETも保護。
+
+完了条件:
+- tokenなし401。
+- tokenあり成功。
+- error shapeが統一。
+
+
+PR-5: LLM settings validation強化
+-------------------------------
+
+優先度: P1
+対象:
+- src/app/api/settings/llm/route.ts
+- src/lib/llm/settings.ts
+
+内容:
+- provider, model, baseUrl, temperature, costを厳格検証。
+- https必須、localhost/private IP禁止。
+- productionではAPP_SETTINGS_ENCRYPTION_KEY必須。
+
+完了条件:
+- invalid inputで400。
+- 本番鍵未設定時は保存不可。
+
+
+PR-6: AnalysisInputSnapshotV1追加
+--------------------------------
+
+優先度: P1
+対象:
+- src/lib/analysis/types.ts
+- src/lib/analysis/llm-enhancer.ts
+- src/lib/llm/types.ts
+- src/lib/jobs/daily-scan.ts
+
+内容:
+- schemaVersion, scoreEngineVersion, scoringConfigVersion, capturedAt, dataSources, featureAvailability, scenarioQualityを追加。
+- LLM inputとscore snapshot保存に使う。
+
+完了条件:
+- LLM inputにversionとdata qualityが含まれる。
+- score snapshotに再分析可能な情報が入る。
+
+
+PR-7: ScoreContribution signedImpact追加
+---------------------------------------
+
+優先度: P2
+対象:
+- src/lib/scoring/types.ts
+- src/lib/scoring/scoring-engine.ts
+- src/lib/scoring/signal-detector.ts
+
+内容:
+- signedImpact, impactMagnitudeを追加。
+- negative reason抽出をimpactMagnitude基準にする。
+
+完了条件:
+- risk高のfeatureが弱点理由として上位に出る。
+
+
+PR-8: Storyline probability normalization
+----------------------------------------
+
+優先度: P2
+対象:
+- src/lib/storylines/engine.ts
+- src/lib/storylines/types.ts
+- src/lib/storylines/storylines.test.ts
+
+内容:
+- Best/Base/Conservative/Worstの確率合計を100に正規化。
+- probabilityMethodを保存。
+
+完了条件:
+- 4シナリオ合計が100。
+
+
+PR-9: Outcome DB migration追加
+-----------------------------
+
+優先度: P2
+対象:
+- supabase/migrations/0007_analysis_outcomes.sql
+- src/lib/supabase/types.ts
+- src/lib/supabase/repository.ts
+
+内容:
+- price_observations
+- signal_outcomes
+- storyline_outcomes
+- user_decisions
+- review_events
+- data_quality_observations
+
+完了条件:
+- migration追加。
+- repository read/write追加。
+- RLS enabled + service_role policyあり。
+
+
+PR-10: UI文言の投資助言リスク低減
+--------------------------------
+
+優先度: P3
+対象:
+- src/components/signal-card.tsx
+- src/lib/market-display.ts
+- src/app/candidates/page.tsx
+- src/app/dashboard/page.tsx
+
+内容:
+- Strong Entry -> 最優先レビュー候補
+- Entry候補 -> 追加確認候補
+- 買い候補 -> 候補度
+- Entry -> 想定エントリー水準
+- 損切 -> 無効化ライン
+- 目標 -> 参考ターゲット
+- 共通注記を追加。
+
+完了条件:
+- 売買推奨に見える文言が主要UIから消える。

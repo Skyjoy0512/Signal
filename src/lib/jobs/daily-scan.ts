@@ -1,4 +1,5 @@
-import type { Symbol, LayerCondition as DbLayerCondition, MarketSnapshot, Signal as DbSignal } from "../supabase/types";
+import crypto from "crypto";
+import type { Symbol, LayerCondition as DbLayerCondition, MarketSnapshot, Signal as DbSignal, LlmRun } from "../supabase/types";
 import type { SymbolSnapshot, LayerCondition } from "../intelligence/types";
 import type { IndicatorInput } from "../indicators/types";
 import type { ScoredSymbol, DailyScanResult } from "./types";
@@ -6,7 +7,7 @@ import type { ScoredSymbol, DailyScanResult } from "./types";
 import { YFinanceAdapter } from "../data-sources/adapters/yfinance";
 import { computeAllIndicators, computeDataConfidence } from "../indicators/calculator";
 import { computeAllLayers } from "../intelligence/orchestrator";
-import { InvestmentAnalysisEngine, buildLlmInputSnapshot } from "../analysis";
+import { InvestmentAnalysisEngine, buildAnalysisInputSnapshot, buildLlmInputSnapshot } from "../analysis";
 import type { AnalysisSubject } from "../analysis";
 import {
   getForbiddenSymbols, getActiveEvents,
@@ -17,8 +18,11 @@ import {
 import { NotificationEngine } from "../notifications/engine";
 import type { MorningBriefData } from "../notifications/types";
 import { getLlmRuntimeConfig } from "../llm/settings";
+import { LLM_PROMPT_VERSION } from "../llm/prompts";
+import type { LlmRunResult } from "../llm/types";
 import { generateStorylineSet } from "../storylines";
 import type { PreviousStorylineSet, StorylineSet } from "../storylines";
+import { SCORE_ENGINE_VERSION, SCORING_CONFIG_VERSION } from "../scoring/config";
 
 export interface DailyScanOptions {
   symbols: Symbol[];
@@ -173,14 +177,34 @@ export async function runDailyScan(options: DailyScanOptions): Promise<DailyScan
   const analysisEngine = new InvestmentAnalysisEngine();
   let llmAnalysisEngine = new InvestmentAnalysisEngine({ llm: { enabled: true } });
   let llmRuntimeMetadata: Record<string, unknown> = {};
+  let llmRunConfig = {
+    provider: process.env.LLM_PROVIDER ?? "deepseek",
+    reasoningModel: process.env.LLM_REASONING_MODEL ?? process.env.LLM_MODEL ?? "deepseek-chat",
+    workerModel: process.env.LLM_WORKER_MODEL ?? process.env.LLM_MODEL ?? "deepseek-chat",
+    criticModel: process.env.LLM_CRITIC_MODEL ?? process.env.LLM_REASONING_MODEL ?? process.env.LLM_MODEL ?? "deepseek-chat",
+    reasoningTemperature: Number(process.env.LLM_REASONING_TEMPERATURE ?? 0.3),
+    criticTemperature: Number(process.env.LLM_CRITIC_TEMPERATURE ?? 0.5),
+    enableCritic: false,
+  };
   try {
     const runtime = await getLlmRuntimeConfig();
     llmAnalysisEngine = new InvestmentAnalysisEngine({ llm: { enabled: true, provider: runtime.provider, ...runtime.config } });
+    llmRunConfig = {
+      provider: runtime.settings.provider,
+      reasoningModel: runtime.settings.reasoningModel,
+      workerModel: runtime.settings.workerModel,
+      criticModel: runtime.settings.criticModel,
+      reasoningTemperature: runtime.settings.reasoningTemperature,
+      criticTemperature: runtime.settings.criticTemperature,
+      enableCritic: runtime.settings.enableCritic,
+    };
     llmRuntimeMetadata = {
       provider: runtime.settings.provider,
       reasoningModel: runtime.settings.reasoningModel,
       workerModel: runtime.settings.workerModel,
       criticModel: runtime.settings.criticModel,
+      promptVersion: LLM_PROMPT_VERSION,
+      schemaVersion: "analysis-input-v1",
       source: runtime.settings.source,
     };
   } catch (e) {
@@ -227,7 +251,32 @@ export async function runDailyScan(options: DailyScanOptions): Promise<DailyScan
 
         if (persist) {
           try {
-            await insertLlmRun({ task_type: "reasoning", run_role: "reasoning", status: llmResult.llm.reasoning.status, input_snapshot_json: llmInput as never, output_json: llmResult.llm.analysis as never, input_tokens: llmResult.llm.reasoning.inputTokens, output_tokens: llmResult.llm.reasoning.outputTokens, estimated_cost: llmResult.llm.reasoning.estimatedCost, latency_ms: llmResult.llm.reasoning.latencyMs, error_message: llmResult.llm.reasoning.errorMessage ?? null });
+            await insertLlmRun(buildLlmRunInsert({
+              taskType: "analysis",
+              runRole: "reasoning",
+              run: llmResult.llm.reasoning,
+              inputSnapshot: llmInput,
+              outputJson: llmResult.llm.analysis,
+              provider: llmRunConfig.provider,
+              model: llmResult.llm.reasoning.model ?? llmRunConfig.reasoningModel,
+              temperature: llmRunConfig.reasoningTemperature,
+              maxTokens: 4096,
+              criticEnabled: llmRunConfig.enableCritic || llmResult.llm.analysis.action_suggestion === "strong_entry_candidate",
+            }));
+            if (llmResult.llm.critic) {
+              await insertLlmRun(buildLlmRunInsert({
+                taskType: "analysis",
+                runRole: "critic",
+                run: llmResult.llm.critic,
+                inputSnapshot: llmInput,
+                outputJson: llmResult.llm.criticOutput,
+                provider: llmRunConfig.provider,
+                model: llmResult.llm.critic.model ?? llmRunConfig.criticModel,
+                temperature: llmRunConfig.criticTemperature,
+                maxTokens: 2048,
+                criticEnabled: true,
+              }));
+            }
             // insertSignal would need to come before this - deferred to persist block below
           } catch {}
         }
@@ -270,8 +319,15 @@ export async function runDailyScan(options: DailyScanOptions): Promise<DailyScan
         status: "completed",
         started_at: startedAt,
         finished_at: new Date().toISOString(),
+        engine_version: SCORE_ENGINE_VERSION,
+        scoring_config_version: SCORING_CONFIG_VERSION,
+        feature_schema_version: "analysis-input-v1",
+        prompt_version: LLM_PROMPT_VERSION,
+        llm_schema_version: "analysis-input-v1",
+        universe_type: "daily_scan",
         config_json: { llmTopN, lookbackDays, benchmarks: benchmarkSymbols, llm: llmRuntimeMetadata, enableStorylines, storylineTopN } as never,
         metadata_json: { symbolCount: symbols.length, strongCount: strongSignals.length, entryCount: entryCandidates.length, watchCount: watchList.length, avoidedCount: avoided.length, storylineCount: storylineSets.length } as never,
+        data_source_summary_json: { ohlcv: "yfinance", benchmarkSymbols, dataMaxAgeHours: DATA_MAX_AGE_HOURS } as never,
       });
       analysisRunId = analysisRun.id;
     } catch (e) { errors.push(`Analysis run persist: ${e instanceof Error ? e.message : "Unknown"}`); }
@@ -299,6 +355,7 @@ export async function runDailyScan(options: DailyScanOptions): Promise<DailyScan
           } catch {}
         }
         try {
+          const snapshotSubject = buildAnalysisSubject(sc.symbol, sc.snapshot);
           await insertScoreSnapshot({
             analysis_run_id: analysisRunId,
             signal_id: sig.id,
@@ -319,7 +376,17 @@ export async function runDailyScan(options: DailyScanOptions): Promise<DailyScan
             decision_reasons_json: sc.classification.reasons as never,
             strategy_tags_json: sc.scores.strategyTags,
             strategy_fit_scores_json: sc.scores.strategyFitScores,
-            input_snapshot_json: { snapshot: sc.snapshot, layer: sc.layer, scenario: sc.classification.scenario } as never,
+            input_snapshot_json: buildAnalysisInputSnapshot(snapshotSubject, {
+              scores: sc.scores,
+              classification: sc.classification,
+              scoringInput: analysisEngine.analyzeWithRules(snapshotSubject).scoringInput,
+            }) as never,
+            score_engine_version: SCORE_ENGINE_VERSION,
+            scoring_config_version: SCORING_CONFIG_VERSION,
+            market_data_as_of: capturedAt,
+            scenario_quality_json: (sc.classification.scenario?.scenarioQuality ?? { atrSource: "unavailable", confidence: dataConfidence[sc.symbol.symbol] ?? 50, warnings: ["trade scenario is unavailable"] }) as never,
+            feature_availability_json: { technical: true, fundamentals: false, scenario: Boolean(sc.classification.scenario) } as never,
+            score_calibration_version: "score-calibration-v1",
           });
         } catch (e) { errors.push(`Score snapshot persist ${sc.symbol.symbol}: ${e instanceof Error ? e.message : "Unknown"}`); }
       } catch (e) { errors.push(`Signal persist ${sc.symbol.symbol}: ${e instanceof Error ? e.message : "Unknown"}`); }
@@ -338,12 +405,17 @@ export async function runDailyScan(options: DailyScanOptions): Promise<DailyScan
           revision_summary: storyline.revisionSummary,
           revision_reasons_json: storyline.revisionReasons as never,
           score_snapshot_json: storyline.scoreSnapshot as never,
+          storyline_engine_version: "storyline-engine-v1",
+          scenario_probability_method: storyline.probabilityMethod,
+          data_quality_json: { dataConfidence: storyline.scoreSnapshot.dataConfidence } as never,
         });
         await insertStorylineScenarios(storyline.scenarios.map((scenario) => ({
           storyline_set_id: set.id,
           scenario_kind: scenario.kind,
           label: scenario.label,
           probability_pct: scenario.probabilityPct,
+          raw_weight: scenario.rawWeight ?? scenario.probabilityPct,
+          normalized_probability_pct: scenario.normalizedProbabilityPct ?? scenario.probabilityPct,
           horizon: scenario.horizon,
           thesis: scenario.thesis,
           expected_return_pct: scenario.expectedReturnPct,
@@ -431,5 +503,49 @@ export async function runDailyScan(options: DailyScanOptions): Promise<DailyScan
       eventBlockerActive: blockedSymbols.has(sym.symbol),
       isForbidden: forbiddenTickers.has(sym.symbol),
     };
+  }
+
+  function buildLlmRunInsert(input: {
+    taskType: string;
+    runRole: string;
+    run: LlmRunResult;
+    inputSnapshot: unknown;
+    outputJson: unknown;
+    provider: string;
+    model: string;
+    temperature: number;
+    maxTokens: number;
+    criticEnabled: boolean;
+  }): Omit<LlmRun, "id" | "created_at"> {
+    const outputJson = input.outputJson ?? input.run.outputJson;
+    return {
+      task_type: input.taskType,
+      run_role: input.runRole,
+      status: input.run.status,
+      input_snapshot_json: input.inputSnapshot as never,
+      output_json: outputJson as never,
+      input_tokens: input.run.inputTokens,
+      output_tokens: input.run.outputTokens,
+      estimated_cost: input.run.estimatedCost,
+      latency_ms: input.run.latencyMs,
+      error_message: input.run.errorMessage ?? null,
+      provider: input.provider,
+      model: input.model,
+      prompt_version: LLM_PROMPT_VERSION,
+      schema_version: "analysis-input-v1",
+      temperature: input.temperature,
+      max_tokens: input.maxTokens,
+      repair_attempt_count: input.run.repairAttemptCount ?? 0,
+      critic_enabled: input.criticEnabled,
+      finish_reason: input.run.finishReason ?? null,
+      estimated_cost_usd: input.run.estimatedCost,
+      request_id: input.run.requestId ?? null,
+      input_hash: hashStable(input.inputSnapshot),
+      output_hash: hashStable(outputJson),
+    };
+  }
+
+  function hashStable(value: unknown): string {
+    return crypto.createHash("sha256").update(JSON.stringify(value ?? null)).digest("hex");
   }
 }

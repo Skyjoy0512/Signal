@@ -8,6 +8,8 @@ export default function SettingsPage() {
     { key: "SUPABASE_URL", desc: "Postgresデータベース接続先", required: true },
     { key: "SUPABASE_ANON_KEY", desc: "クライアント側読み取り用", required: true },
     { key: "SUPABASE_SERVICE_ROLE_KEY", desc: "サーバー側全権限", required: true },
+    { key: "APP_ADMIN_TOKEN", desc: "管理API保護トークン", required: true },
+    { key: "APP_SETTINGS_ENCRYPTION_KEY", desc: "LLM設定の暗号化キー", required: true },
     { key: "DEEPSEEK_API_KEY", desc: "LLM推論・ワーカーモデル用", required: true },
     { key: "LINE_CHANNEL_ACCESS_TOKEN", desc: "プッシュメッセージ認証", required: true },
     { key: "LINE_CHANNEL_SECRET", desc: "Webhook署名検証", required: true },

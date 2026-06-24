@@ -4,6 +4,7 @@ import type { CSSProperties } from "react";
 import { useEffect, useState } from "react";
 import { Brain, Database, GitCompareArrows, RotateCcw, X } from "lucide-react";
 import type { EnrichedCompany } from "@/lib/fundamentals/provider";
+import { buildPeerComparisonSummary, medianDelta, qualityScore, qualityView } from "@/lib/fundamentals/quality-score";
 import { ScoreRing } from "@/components/visual-primitives";
 
 export default function ComparePage() {
@@ -31,6 +32,7 @@ export default function ComparePage() {
   const selectedCompanies = companies.filter((company) => selected.includes(company.ticker));
   const loading = sourceLabel === "読み込み中";
   const resetSelection = () => setSelected(companies.slice(0, 3).map((company) => company.ticker));
+  const peerSummary = buildPeerComparisonSummary(selectedCompanies);
   const factRows = [
     { label: "売上", values: selectedCompanies.map((c) => c.latest.revenue.toLocaleString()) },
     { label: "営業利益", values: selectedCompanies.map((c) => c.latest.operatingIncome.toLocaleString()) },
@@ -39,10 +41,12 @@ export default function ComparePage() {
     { label: "時価総額", values: selectedCompanies.map((c) => c.metrics.marketCap.toLocaleString()) },
   ];
   const intelligenceRows = [
-    { label: "ROE", values: selectedCompanies.map((c) => `${c.latest.roe}%`) },
-    { label: "PER", values: selectedCompanies.map((c) => `${c.metrics.per}倍`) },
-    { label: "PBR", values: selectedCompanies.map((c) => `${c.metrics.pbr}倍`) },
-    { label: "判断メモ", values: selectedCompanies.map((c) => judgement(c)) },
+    { label: "ROE", values: selectedCompanies.map((c) => `${c.latest.roe}% (${medianDelta(c.latest.roe, peerSummary.medians.roe)})`) },
+    { label: "営業利益率差", values: selectedCompanies.map((c) => `${c.latest.operatingMargin}% (${medianDelta(c.latest.operatingMargin, peerSummary.medians.operatingMargin)})`) },
+    { label: "PER確認", values: selectedCompanies.map((c) => `${c.metrics.per}倍 (${medianDelta(c.metrics.per, peerSummary.medians.per)})`) },
+    { label: "PBR確認", values: selectedCompanies.map((c) => `${c.metrics.pbr}倍 (${medianDelta(c.metrics.pbr, peerSummary.medians.pbr)})`) },
+    { label: "判断メモ", values: selectedCompanies.map((c) => qualityView(c).judgement) },
+    { label: "バリュエーション", values: selectedCompanies.map((c) => qualityView(c).valuationNote) },
   ];
   const avgScore = selectedCompanies.length
     ? Math.round(selectedCompanies.reduce((sum, company) => sum + qualityScore(company), 0) / selectedCompanies.length)
@@ -155,6 +159,14 @@ export default function ComparePage() {
         </section>
       </div>}
 
+      {!loading && selectedCompanies.length > 0 && peerSummary.warning && (
+        <div className="card" style={{ marginBottom: 14, borderColor: "rgba(194,91,36,0.32)", background: "#fff8f1" }}>
+          <div className="stat-label">比較条件</div>
+          <div style={{ fontSize: 14, fontWeight: 700, marginTop: 4 }}>{peerSummary.industryLabel}</div>
+          <p className="meaning-note">{peerSummary.warning}</p>
+        </div>
+      )}
+
       {!loading && selectedCompanies.length === 0 && (
         <div className="card card-dashed empty-state empty-state-compact">
           <div>
@@ -203,17 +215,6 @@ function ContextCard({ title, copy, image }: { title: string; copy: string; imag
       </div>
     </div>
   );
-}
-
-function qualityScore(company: EnrichedCompany) {
-  return Math.max(0, Math.min(100, Math.round((company.latest.roe * 5 + company.latest.operatingMargin * 4 + (100 - company.metrics.per * 2)) / 3)));
-}
-
-function judgement(company: EnrichedCompany) {
-  const score = qualityScore(company);
-  if (score >= 70) return "優先確認";
-  if (score >= 50) return "比較対象";
-  return "慎重確認";
 }
 
 const th = { textAlign: "left" as const };

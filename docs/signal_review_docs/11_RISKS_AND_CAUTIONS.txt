@@ -1,0 +1,172 @@
+11 Risks / Cautions
+===================
+
+RISK-1: 投資助言に見える表現
+---------------------------
+
+注意:
+Signalは個人利用の投資判断支援アプリであり、売買推奨や投資助言ではない。
+UI文言が強すぎると誤解を招く。
+
+避ける文言:
+- 買い推奨
+- 強い買い
+- 今すぐ買う
+- 売るべき
+- 利確推奨
+- 損切推奨
+- 自動売買候補
+
+推奨文言:
+- レビュー候補
+- 追加確認候補
+- 候補度
+- 確認観点
+- 参考ターゲット
+- 無効化ライン
+- 想定エントリー水準
+- データ不足のため参考扱い
+
+共通注記:
+スコアとシナリオは投資判断の補助情報です。売買を推奨するものではありません。データ品質、イベント、地合い、保有状況を確認して判断してください。
+
+
+RISK-2: LLM過信
+---------------
+
+注意:
+将来より強いLLMに差し替えた場合、文章レビューや反証の品質は上がる可能性がある。
+しかし、LLMを最終スコアやシグナル判定の支配者にしてはいけない。
+
+守るべき原則:
+- hard blockerはルールベース。
+- final score capはルールベース。
+- data confidence capはルールベース。
+- event blockerはルールベース。
+- forbidden symbolはルールベース。
+- RR最低条件はルールベース。
+
+LLM出力は以下として扱う:
+- 参考レビュー
+- 追加確認観点
+- 反証リスト
+- risk narrative
+- scenario critique
+
+
+RISK-3: データ品質
+-----------------
+
+注意:
+モック、推定、古いデータ、欠損データが混在すると、ユーザーが実データと誤認する。
+
+対応:
+- dataSourceをAPI responseに含める。
+- dataAsOfを表示する。
+- dataConfidenceを表示する。
+- 推定値はestimatedと明示する。
+- 欠損featureは中立50点で silently score しない。
+- featureAvailabilityをLLM inputとDBに保存する。
+
+
+RISK-4: finalEntryScoreの見かけ精度
+----------------------------------
+
+注意:
+0-100スコアは精密に見えるが、実際にはルールベースの候補度である。
+
+対応:
+- スコアを「期待リターン」や「勝率」として表示しない。
+- outcome分析が入るまでは「候補度」と表現する。
+- score帯の実績が取れたらcalibration dashboardを作る。
+
+
+RISK-5: service_role依存
+-----------------------
+
+注意:
+Supabase RLSがservice_role前提の場合、Next.js API routeが唯一の防壁になる。
+
+対応:
+- service_role keyをclientへ絶対に渡さない。
+- API routeに認可を追加する。
+- createClientをcreateServiceRoleClientへリネームする。
+- 本番ではAPP_ADMIN_TOKEN必須。
+- 将来multi-user化時はowner_user_idを追加する。
+
+
+RISK-6: APIキー保存
+------------------
+
+注意:
+LLM APIキーをDBに保存する場合、暗号鍵とアクセス制御が重要。
+
+対応:
+- productionではAPP_SETTINGS_ENCRYPTION_KEY必須。
+- fallback dev keyを本番で使わない。
+- SUPABASE_SERVICE_ROLE_KEYを暗号鍵に兼用しない。
+- encryption_key_versionを保存する。
+- apiKeyPreviewをログに出さない。
+- settings GET/POSTを認可する。
+
+
+RISK-7: openai-compatible baseUrl
+--------------------------------
+
+注意:
+任意baseUrlを許可するとSSRFや内部ネットワークアクセスのリスクがある。
+
+対応:
+- https必須。
+- localhost/private IP/metadata address禁止。
+- 可能ならallowlist方式。
+- timeoutとresponse size limitを設定する。
+
+
+RISK-8: external packの情報漏洩
+------------------------------
+
+注意:
+外部レビュー用packは便利だが、個人メモ、保有情報、API key、内部URLが漏れる可能性がある。
+
+対応:
+- secret-like patternをsanitizeする。
+- 保有数量やメモはopt-inにする。
+- pack冒頭に目的と免責を書く。
+- API keyやtokenは出力禁止。
+
+
+RISK-9: バックテストの罠
+-----------------------
+
+注意:
+outcome評価やbacktestを入れると、以下のバイアスが入りやすい。
+
+- lookahead bias
+- survivorship bias
+- universe selection bias
+- split/dividend adjustment missing
+- score engine version mixing
+- prompt version mixing
+- later data leakage
+
+対応:
+- score_snapshot時点のinput_snapshotを保存する。
+- scoreEngineVersionを保存する。
+- universe_membersの履歴を保存する。
+- adjusted priceを保存する。
+- delisted/suspendedを除外しない。
+- outcome評価時点を明確にする。
+
+
+RISK-10: 自動化しすぎ
+--------------------
+
+注意:
+Signalは売買自動執行ではない。
+日次scanや通知はよいが、自動注文や自動売買判断に寄せない。
+
+対応:
+- user decisionを明示的に残す。
+- 「自動実行」ではなく「レビューキュー作成」にする。
+- external API連携時も注文APIには接続しない。

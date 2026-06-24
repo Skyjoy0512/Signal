@@ -52,6 +52,11 @@ export async function GET() {
       scenario: s.classification.scenario,
       storyline: storylineMap.get(s.symbol.symbol) ?? null,
       reason: s.classification.tierReason,
+      decisionReasons: s.classification.reasons,
+      gateDetails: s.classification.gateDetails,
+      dataConfidence: result.context.dataConfidence[s.symbol.symbol] ?? 50,
+      eventBlockerActive: !s.classification.gates.eventBlockerGate,
+      featureAvailability: s.scores.featureAvailability,
       snapshot: s.snapshot,
       fundamentals: buildFundamentals(s.symbol.symbol, s.scores.finalEntryScore, s.scores.riskScore),
       layers: {

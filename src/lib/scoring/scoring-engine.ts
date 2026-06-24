@@ -3,11 +3,14 @@ import { FINAL_SCORE_CAPS, SCORE_WEIGHTS } from "./config";
 
 function clamp(v: number): number { return Math.max(0, Math.min(100, Math.round(v))); }
 
-type WeightedFeature = { feature: string; label: string; rawScore: number; weight: number; reason: string; highIsGood?: boolean };
+type WeightedFeature = { feature: string; label: string; rawScore: number | null; weight: number; reason: string; highIsGood?: boolean; available?: boolean; missingReason?: string };
 type ComponentScore<T> = { score: number; breakdown: T; contributions: ScoreContribution[] };
 
 function weightedScore(features: WeightedFeature[]): number {
-  return clamp(features.reduce((sum, feature) => sum + feature.rawScore * feature.weight, 0));
+  const available = availableFeatures(features);
+  const totalWeight = available.reduce((sum, feature) => sum + feature.weight, 0);
+  if (totalWeight <= 0) return 50;
+  return clamp(available.reduce((sum, feature) => sum + (feature.rawScore ?? 50) * (feature.weight / totalWeight), 0));
 }
 
 function average(values: number[]): number {
@@ -15,21 +18,40 @@ function average(values: number[]): number {
 }
 
 function buildContributions(component: ScoreComponent, features: WeightedFeature[]): ScoreContribution[] {
+  const available = availableFeatures(features);
+  const totalWeight = available.reduce((sum, feature) => sum + feature.weight, 0);
   return features.map((feature) => {
-    const neutralBand = feature.rawScore >= 45 && feature.rawScore <= 55;
+    const effectiveScore = feature.rawScore ?? 50;
+    const available = isFeatureAvailable(feature);
+    const effectiveWeight = available && totalWeight > 0 ? feature.weight / totalWeight : 0;
+    const neutralBand = effectiveScore >= 45 && effectiveScore <= 55;
     const highIsGood = feature.highIsGood ?? true;
-    const polarity = neutralBand ? "neutral" : (feature.rawScore >= 55) === highIsGood ? "positive" : "negative";
+    const polarity = !available || neutralBand ? "neutral" : (effectiveScore >= 55) === highIsGood ? "positive" : "negative";
+    const contribution = Math.round(effectiveScore * effectiveWeight * 10) / 10;
+    const impactMagnitude = polarity === "neutral" ? 0 : Math.abs(contribution);
     return {
       component,
       feature: feature.feature,
       label: feature.label,
-      rawScore: clamp(feature.rawScore),
-      weight: feature.weight,
-      contribution: Math.round(feature.rawScore * feature.weight * 10) / 10,
+      rawScore: clamp(effectiveScore),
+      weight: Math.round(effectiveWeight * 1000) / 1000,
+      contribution,
+      signedImpact: polarity === "positive" ? impactMagnitude : polarity === "negative" ? -impactMagnitude : 0,
+      impactMagnitude,
       polarity,
-      reason: feature.reason,
+      reason: available ? feature.reason : feature.missingReason ?? feature.reason,
+      available,
+      missingReason: available ? undefined : feature.missingReason ?? feature.reason,
     };
   });
+}
+
+function isFeatureAvailable(feature: WeightedFeature): boolean {
+  return feature.available ?? feature.rawScore !== null;
+}
+
+function availableFeatures(features: WeightedFeature[]): WeightedFeature[] {
+  return features.filter((feature) => isFeatureAvailable(feature) && feature.rawScore !== null);
 }
 
 function computeOpportunityScore(input: ScoringInput): ComponentScore<ScoreBreakdown["opportunity"]> {
@@ -103,13 +125,14 @@ function computeOpportunityScore(input: ScoringInput): ComponentScore<ScoreBreak
     fundamentalReason = reasons.length > 0 ? `fundamental quality, growth, and valuation were blended: ${reasons.join(", ")}` : "fundamental inputs are unavailable";
   }
   const catalystVal = 50;
+  const hasFundamentals = Boolean(f && [f.roe, f.operatingMargin, f.revenueGrowth, f.epsGrowth, f.pe].some((value) => value != null));
   const features = [
-    { feature: "trend", label: "Trend", rawScore: trendVal, weight: SCORE_WEIGHTS.opportunity.trend, reason: trendReason },
-    { feature: "volume", label: "Volume", rawScore: volumeVal, weight: SCORE_WEIGHTS.opportunity.volume, reason: volumeReason },
-    { feature: "relativeStrength", label: "Relative strength", rawScore: relStrength, weight: SCORE_WEIGHTS.opportunity.relativeStrength, reason: relStrengthReason },
-    { feature: "theme", label: "Theme alignment", rawScore: themeAlignment, weight: SCORE_WEIGHTS.opportunity.theme, reason: themeReason },
-    { feature: "fundamental", label: "Fundamentals", rawScore: fundamentalVal, weight: SCORE_WEIGHTS.opportunity.fundamental, reason: fundamentalReason },
-    { feature: "catalyst", label: "Catalyst", rawScore: catalystVal, weight: SCORE_WEIGHTS.opportunity.catalyst, reason: "explicit catalyst data is not yet integrated" },
+    { feature: "trend", label: "Trend", rawScore: trendVal, weight: SCORE_WEIGHTS.opportunity.trend, reason: trendReason, available: (snapshot.sma20 !== null && snapshot.sma50 !== null) || snapshot.return20d !== null, missingReason: "trend inputs are unavailable" },
+    { feature: "volume", label: "Volume", rawScore: volumeVal, weight: SCORE_WEIGHTS.opportunity.volume, reason: volumeReason, available: snapshot.volumeRatio20d !== null, missingReason: "volume ratio is unavailable" },
+    { feature: "relativeStrength", label: "Relative strength", rawScore: relStrength, weight: SCORE_WEIGHTS.opportunity.relativeStrength, reason: relStrengthReason, available: snapshot.distanceFrom52wHighPct !== null, missingReason: "52-week relative strength is unavailable" },
+    { feature: "theme", label: "Theme alignment", rawScore: themeAlignment, weight: SCORE_WEIGHTS.opportunity.theme, reason: themeReason, available: Boolean(symCond && secCond), missingReason: "symbol and sector layer alignment is unavailable" },
+    { feature: "fundamental", label: "Fundamentals", rawScore: fundamentalVal, weight: SCORE_WEIGHTS.opportunity.fundamental, reason: fundamentalReason, available: hasFundamentals, missingReason: "fundamental inputs are unavailable" },
+    { feature: "catalyst", label: "Catalyst", rawScore: catalystVal, weight: SCORE_WEIGHTS.opportunity.catalyst, reason: "explicit catalyst data is not yet integrated", available: false, missingReason: "explicit catalyst data is not yet integrated" },
   ];
   return { score: weightedScore(features), breakdown: { trend: trendVal, volume: volumeVal, relativeStrength: relStrength, theme: themeAlignment, fundamental: fundamentalVal, catalyst: catalystVal }, contributions: buildContributions("opportunity", features) };
 }
@@ -158,12 +181,13 @@ function computeEntryTimingScore(input: ScoringInput): ComponentScore<ScoreBreak
     else priceAction = 40;
   }
 
+  const hasSetupInput = snapshot.sma20 !== null || snapshot.return5d !== null || snapshot.drawdownFromRecentHighPct !== null || snapshot.volumeRatio20d !== null;
   const features = [
-    { feature: "setup", label: "Setup", rawScore: setup, weight: SCORE_WEIGHTS.entryTiming.setup, reason: `${setupSignals} setup signal(s) passed` },
-    { feature: "rsiPosition", label: "RSI position", rawScore: rsiPosition, weight: SCORE_WEIGHTS.entryTiming.rsiPosition, reason: snapshot.rsi14 == null ? "RSI is unavailable" : `RSI is ${Math.round(snapshot.rsi14)}` },
-    { feature: "atrPosition", label: "Short-term volatility", rawScore: atrPosition, weight: SCORE_WEIGHTS.entryTiming.atrPosition, reason: "5-day absolute return is used as a volatility proxy" },
-    { feature: "supportResistance", label: "Support/resistance", rawScore: supportResistance, weight: SCORE_WEIGHTS.entryTiming.supportResistance, reason: "distance from SMA20 is used as the near-term support proxy" },
-    { feature: "priceAction", label: "Price action", rawScore: priceAction, weight: SCORE_WEIGHTS.entryTiming.priceAction, reason: "5-day return indicates recent price direction" },
+    { feature: "setup", label: "Setup", rawScore: setup, weight: SCORE_WEIGHTS.entryTiming.setup, reason: `${setupSignals} setup signal(s) passed`, available: hasSetupInput, missingReason: "setup inputs are unavailable" },
+    { feature: "rsiPosition", label: "RSI position", rawScore: rsiPosition, weight: SCORE_WEIGHTS.entryTiming.rsiPosition, reason: snapshot.rsi14 == null ? "RSI is unavailable" : `RSI is ${Math.round(snapshot.rsi14)}`, available: snapshot.rsi14 !== null, missingReason: "RSI is unavailable" },
+    { feature: "shortTermVolatilityProxy", label: "Short-term volatility", rawScore: atrPosition, weight: SCORE_WEIGHTS.entryTiming.atrPosition, reason: "5-day absolute return is used as a volatility proxy", available: snapshot.return5d !== null, missingReason: "5-day return is unavailable for volatility proxy" },
+    { feature: "supportResistance", label: "Support/resistance", rawScore: supportResistance, weight: SCORE_WEIGHTS.entryTiming.supportResistance, reason: "distance from SMA20 is used as the near-term support proxy", available: snapshot.sma20 !== null, missingReason: "SMA20 is unavailable for support proxy" },
+    { feature: "priceAction", label: "Price action", rawScore: priceAction, weight: SCORE_WEIGHTS.entryTiming.priceAction, reason: "5-day return indicates recent price direction", available: snapshot.return5d !== null, missingReason: "5-day return is unavailable" },
   ];
   return { score: weightedScore(features), breakdown: { setup, rsiPosition, atrPosition, supportResistance, priceAction }, contributions: buildContributions("entryTiming", features) };
 }
@@ -245,16 +269,16 @@ function computeRiskScore(input: ScoringInput): ComponentScore<ScoreBreakdown["r
   }
 
   const features = [
-    { feature: "volatility", label: "Volatility", rawScore: volatilityVal, weight: SCORE_WEIGHTS.risk.volatility, reason: "5-day move and recent drawdown estimate price shock risk", highIsGood: false },
-    { feature: "liquidity", label: "Liquidity risk", rawScore: liquidityVal, weight: SCORE_WEIGHTS.risk.liquidity, reason: "20-day volume ratio estimates liquidity pressure", highIsGood: false },
-    { feature: "event", label: "Event risk", rawScore: eventVal, weight: SCORE_WEIGHTS.risk.event, reason: "event blocker and extreme valuation can raise event/sentiment risk", highIsGood: false },
-    { feature: "market", label: "Market risk", rawScore: marketRisk, weight: SCORE_WEIGHTS.risk.market, reason: "market layer condition adjusts broad market risk", highIsGood: false },
-    { feature: "sector", label: "Sector risk", rawScore: sectorRiskVal, weight: SCORE_WEIGHTS.risk.sector, reason: "sector layer condition adjusts industry risk", highIsGood: false },
-    { feature: "data", label: "Data risk", rawScore: dataRisk, weight: SCORE_WEIGHTS.risk.data, reason: "low data confidence increases decision risk", highIsGood: false },
-    { feature: "overheating", label: "Overheating", rawScore: overheatingVal, weight: SCORE_WEIGHTS.risk.overheating, reason: "RSI and 20-day return detect stretched momentum", highIsGood: false },
-    { feature: "trendBreakdown", label: "Trend breakdown", rawScore: trendBreakdownVal, weight: SCORE_WEIGHTS.risk.trendBreakdown, reason: "moving averages and 20-day return detect trend damage", highIsGood: false },
-    { feature: "valuation", label: "Valuation risk", rawScore: valuationVal, weight: SCORE_WEIGHTS.risk.valuation, reason: "P/E adds a lightweight valuation risk check", highIsGood: false },
-    { feature: "breakoutFailure", label: "Breakout failure", rawScore: breakoutFailureVal, weight: SCORE_WEIGHTS.risk.breakoutFailure, reason: "near-high weakness and failed momentum raise breakout failure risk", highIsGood: false },
+    { feature: "volatility", label: "Volatility", rawScore: volatilityVal, weight: SCORE_WEIGHTS.risk.volatility, reason: "5-day move and recent drawdown estimate price shock risk", highIsGood: false, available: snapshot.return5d !== null || snapshot.drawdownFromRecentHighPct !== null, missingReason: "volatility inputs are unavailable" },
+    { feature: "liquidity", label: "Liquidity risk", rawScore: liquidityVal, weight: SCORE_WEIGHTS.risk.liquidity, reason: "20-day volume ratio estimates liquidity pressure", highIsGood: false, available: snapshot.volumeRatio20d !== null, missingReason: "volume ratio is unavailable" },
+    { feature: "event", label: "Event risk", rawScore: eventVal, weight: SCORE_WEIGHTS.risk.event, reason: "event blocker and extreme valuation can raise event/sentiment risk", highIsGood: false, available: true },
+    { feature: "market", label: "Market risk", rawScore: marketRisk, weight: SCORE_WEIGHTS.risk.market, reason: "market layer condition adjusts broad market risk", highIsGood: false, available: Boolean(marketCond), missingReason: "market layer is unavailable" },
+    { feature: "sector", label: "Sector risk", rawScore: sectorRiskVal, weight: SCORE_WEIGHTS.risk.sector, reason: "sector layer condition adjusts industry risk", highIsGood: false, available: Boolean(sectorCond), missingReason: "sector layer is unavailable" },
+    { feature: "data", label: "Data risk", rawScore: dataRisk, weight: SCORE_WEIGHTS.risk.data, reason: "low data confidence increases decision risk", highIsGood: false, available: true },
+    { feature: "overheating", label: "Overheating", rawScore: overheatingVal, weight: SCORE_WEIGHTS.risk.overheating, reason: "RSI and 20-day return detect stretched momentum", highIsGood: false, available: snapshot.rsi14 !== null || snapshot.return20d !== null, missingReason: "overheating inputs are unavailable" },
+    { feature: "trendBreakdown", label: "Trend breakdown", rawScore: trendBreakdownVal, weight: SCORE_WEIGHTS.risk.trendBreakdown, reason: "moving averages and 20-day return detect trend damage", highIsGood: false, available: (snapshot.sma20 !== null && snapshot.sma50 !== null) || snapshot.return20d !== null, missingReason: "trend breakdown inputs are unavailable" },
+    { feature: "valuation", label: "Valuation risk", rawScore: valuationVal, weight: SCORE_WEIGHTS.risk.valuation, reason: "P/E adds a lightweight valuation risk check", highIsGood: false, available: f?.pe != null, missingReason: "P/E is unavailable" },
+    { feature: "breakoutFailure", label: "Breakout failure", rawScore: breakoutFailureVal, weight: SCORE_WEIGHTS.risk.breakoutFailure, reason: "near-high weakness and failed momentum raise breakout failure risk", highIsGood: false, available: snapshot.distanceFrom52wHighPct !== null || snapshot.return5d !== null || snapshot.volumeRatio20d !== null, missingReason: "breakout failure inputs are unavailable" },
   ];
   return {
     score: weightedScore(features),
@@ -294,6 +318,7 @@ function computeConvictionScore(input: ScoringInput): ComponentScore<ScoreBreakd
 
   let fundConf = 50;
   const f = input.fundamentals;
+  const hasFundamentals = Boolean(f && [f.roe, f.operatingMargin, f.revenueGrowth, f.epsGrowth].some((value) => value != null));
   if (f) {
     let fCount = 0;
     if (f.roe != null && f.roe > 8) fCount++;
@@ -306,11 +331,11 @@ function computeConvictionScore(input: ScoringInput): ComponentScore<ScoreBreakd
   const llmConf = 50;
 
   const features = [
-    { feature: "dataConfidence", label: "Data confidence", rawScore: dataConf, weight: SCORE_WEIGHTS.conviction.dataConfidence, reason: `data confidence is ${Math.round(dataConf)}` },
-    { feature: "multiLayerAlignment", label: "Layer alignment", rawScore: multiLayerAlignment, weight: SCORE_WEIGHTS.conviction.multiLayerAlignment, reason: `${alignCount} bullish layer(s) are aligned` },
-    { feature: "technicalConfirmation", label: "Technical confirmation", rawScore: techConf, weight: SCORE_WEIGHTS.conviction.technicalConfirmation, reason: `${techSignals} technical confirmation signal(s) passed` },
-    { feature: "fundamentalConfirmation", label: "Fundamental confirmation", rawScore: fundConf, weight: SCORE_WEIGHTS.conviction.fundamentalConfirmation, reason: f ? "fundamental quality inputs were checked" : "fundamental inputs are unavailable" },
-    { feature: "llmConfidence", label: "LLM confidence", rawScore: llmConf, weight: SCORE_WEIGHTS.conviction.llmConfidence, reason: "LLM confidence is neutral before the LLM pass" },
+    { feature: "dataConfidence", label: "Data confidence", rawScore: dataConf, weight: SCORE_WEIGHTS.conviction.dataConfidence, reason: `data confidence is ${Math.round(dataConf)}`, available: true },
+    { feature: "multiLayerAlignment", label: "Layer alignment", rawScore: multiLayerAlignment, weight: SCORE_WEIGHTS.conviction.multiLayerAlignment, reason: `${alignCount} bullish layer(s) are aligned`, available: Boolean(symbol || sector || theme || market), missingReason: "market, sector, theme, and symbol layers are unavailable" },
+    { feature: "technicalConfirmation", label: "Technical confirmation", rawScore: techConf, weight: SCORE_WEIGHTS.conviction.technicalConfirmation, reason: `${techSignals} technical confirmation signal(s) passed`, available: snapshot.sma20 !== null || snapshot.sma50 !== null || snapshot.rsi14 !== null || snapshot.volumeRatio20d !== null || snapshot.return20d !== null, missingReason: "technical confirmation inputs are unavailable" },
+    { feature: "fundamentalConfirmation", label: "Fundamental confirmation", rawScore: fundConf, weight: SCORE_WEIGHTS.conviction.fundamentalConfirmation, reason: f ? "fundamental quality inputs were checked" : "fundamental inputs are unavailable", available: hasFundamentals, missingReason: "fundamental confirmation inputs are unavailable" },
+    { feature: "llmConfidence", label: "LLM confidence", rawScore: llmConf, weight: SCORE_WEIGHTS.conviction.llmConfidence, reason: "LLM confidence is neutral before the LLM pass", available: false, missingReason: "LLM confidence is only available after the LLM pass" },
   ];
   return { score: weightedScore(features), breakdown: { dataConfidence: dataConf, multiLayerAlignment, technicalConfirmation: techConf, fundamentalConfirmation: fundConf, llmConfidence: llmConf }, contributions: buildContributions("conviction", features) };
 }
@@ -348,23 +373,7 @@ function computeStrategyFitScores(input: ScoringInput): StrategyFitScores {
 }
 
 function computeFinalEntryScore(symbolScore: number, input: ScoringInput, riskScore: number): number {
-  const { market: marketCond, sector: sectorCond } = input;
-  let marketAdjustment = 0;
-  if (marketCond) {
-    if (marketCond.condition === "strong_bullish") marketAdjustment = 10;
-    else if (marketCond.condition === "bullish") marketAdjustment = 5;
-    else if (marketCond.condition === "bearish") marketAdjustment = -10;
-    else if (marketCond.condition === "strong_bearish") marketAdjustment = -20;
-  }
-  let sectorAdjustment = 0;
-  if (sectorCond) {
-    if (sectorCond.condition === "strong_bullish") sectorAdjustment = 8;
-    else if (sectorCond.condition === "bullish") sectorAdjustment = 4;
-    else if (sectorCond.condition === "bearish") sectorAdjustment = -6;
-    else if (sectorCond.condition === "strong_bearish") sectorAdjustment = -12;
-  }
-  const base = clamp(symbolScore * 0.50 + (50 + marketAdjustment * 0.15 + sectorAdjustment * 0.10));
-  return applyFinalScoreCaps(base, input, riskScore);
+  return applyFinalScoreCaps(computeFinalEntryScoreUncapped(symbolScore, input), input, riskScore);
 }
 
 function applyFinalScoreCaps(score: number, input: ScoringInput, riskScore: number): number {
@@ -412,16 +421,18 @@ export function computeAllScores(input: ScoringInput): ScoringOutput {
       { feature: "riskCap", label: "Risk cap", rawScore: finalEntryScore, weight: 0, reason: finalEntryScore < uncappedFinalEntryScore ? `risk/data gate capped final score from ${uncappedFinalEntryScore} to ${finalEntryScore}` : "no final score cap applied" },
     ]),
   };
+  const featureAvailability = collectFeatureAvailability(contributions);
 
   return {
     opportunityScore: opp.score, entryTimingScore: et.score, riskScore: risk.score, convictionScore: conv.score,
     finalEntryScore, strategyFitScores, strategyTags,
     breakdown: { opportunity: opp.breakdown, entryTiming: et.breakdown, risk: risk.breakdown, conviction: conv.breakdown },
     contributions,
+    featureAvailability,
   };
 }
 
-export function applyLlmAdjustment(scores: ScoringOutput, adj: LlmScoreAdjustment): ScoringOutput {
+export function applyLlmAdjustment(scores: ScoringOutput, adj: LlmScoreAdjustment, input: ScoringInput): ScoringOutput {
   const clampAdj = (v: number) => Math.max(-10, Math.min(10, v));
   const a = { opportunity: clampAdj(adj.opportunity), entryTiming: clampAdj(adj.entryTiming), risk: clampAdj(adj.risk), conviction: clampAdj(adj.conviction) };
   const u: ScoringOutput = {
@@ -439,7 +450,8 @@ export function applyLlmAdjustment(scores: ScoringOutput, adj: LlmScoreAdjustmen
   u.riskScore = clamp(scores.riskScore + a.risk);
   u.convictionScore = clamp(scores.convictionScore + a.conviction);
   const symbolScore = Math.round(u.opportunityScore * SCORE_WEIGHTS.finalEntry.opportunityScore + u.entryTimingScore * SCORE_WEIGHTS.finalEntry.entryTimingScore + (100 - u.riskScore) * SCORE_WEIGHTS.finalEntry.riskControl + u.convictionScore * SCORE_WEIGHTS.finalEntry.convictionScore);
-  u.finalEntryScore = clamp(riskOnlyFinalCap(symbolScore, u.riskScore));
+  const uncappedFinalEntryScore = computeFinalEntryScoreUncapped(symbolScore, input);
+  u.finalEntryScore = computeFinalEntryScore(symbolScore, input, u.riskScore);
   u.contributions.opportunity.push(llmContribution("opportunity", a.opportunity, adj.reason));
   u.contributions.entryTiming.push(llmContribution("entryTiming", a.entryTiming, adj.reason));
   u.contributions.risk.push(llmContribution("risk", a.risk, adj.reason, false));
@@ -449,7 +461,7 @@ export function applyLlmAdjustment(scores: ScoringOutput, adj: LlmScoreAdjustmen
     { feature: "entryTimingScore", label: "Entry timing score", rawScore: u.entryTimingScore, weight: SCORE_WEIGHTS.finalEntry.entryTimingScore, reason: "LLM-adjusted entry timing contribution" },
     { feature: "riskControl", label: "Risk control", rawScore: 100 - u.riskScore, weight: SCORE_WEIGHTS.finalEntry.riskControl, reason: "LLM-adjusted risk score is inverted for final entry scoring" },
     { feature: "convictionScore", label: "Conviction score", rawScore: u.convictionScore, weight: SCORE_WEIGHTS.finalEntry.convictionScore, reason: "LLM-adjusted conviction contribution" },
-    { feature: "riskCap", label: "Risk cap", rawScore: u.finalEntryScore, weight: 0, reason: u.finalEntryScore < symbolScore ? `risk gate capped LLM-adjusted final score from ${symbolScore} to ${u.finalEntryScore}` : "no final score cap applied after LLM adjustment" },
+    { feature: "riskCap", label: "Risk cap", rawScore: u.finalEntryScore, weight: 0, reason: u.finalEntryScore < uncappedFinalEntryScore ? `risk/data gate capped LLM-adjusted final score from ${uncappedFinalEntryScore} to ${u.finalEntryScore}` : "no final score cap applied after LLM adjustment" },
   ]);
   return u;
 }
@@ -471,6 +483,8 @@ export function applyTechnicalQualityOverlay(scores: ScoringOutput, input: Scori
     rawScore: boundedQuality,
     weight: 0.1,
     contribution: adjustment,
+    signedImpact: adjustment,
+    impactMagnitude: Math.abs(adjustment),
     polarity: adjustment > 0 ? "positive" : "negative",
     reason,
   });
@@ -486,28 +500,25 @@ export function applyTechnicalQualityOverlay(scores: ScoringOutput, input: Scori
 }
 
 function computeFinalEntryScoreUncapped(symbolScore: number, input: ScoringInput): number {
-  const { market: marketCond, sector: sectorCond } = input;
-  let marketAdjustment = 0;
-  if (marketCond) {
-    if (marketCond.condition === "strong_bullish") marketAdjustment = 10;
-    else if (marketCond.condition === "bullish") marketAdjustment = 5;
-    else if (marketCond.condition === "bearish") marketAdjustment = -10;
-    else if (marketCond.condition === "strong_bearish") marketAdjustment = -20;
-  }
-  let sectorAdjustment = 0;
-  if (sectorCond) {
-    if (sectorCond.condition === "strong_bullish") sectorAdjustment = 8;
-    else if (sectorCond.condition === "bullish") sectorAdjustment = 4;
-    else if (sectorCond.condition === "bearish") sectorAdjustment = -6;
-    else if (sectorCond.condition === "strong_bearish") sectorAdjustment = -12;
-  }
-  return clamp(symbolScore * 0.50 + (50 + marketAdjustment * 0.15 + sectorAdjustment * 0.10));
+  return clamp(symbolScore + marketScoreAdjustment(input.market) + sectorScoreAdjustment(input.sector));
 }
 
-function riskOnlyFinalCap(score: number, riskScore: number): number {
-  if (riskScore >= 85) return Math.min(score, FINAL_SCORE_CAPS.extremeRisk);
-  if (riskScore >= 75) return Math.min(score, FINAL_SCORE_CAPS.highRisk);
-  return score;
+function marketScoreAdjustment(marketCond: ScoringInput["market"]): number {
+  if (!marketCond) return 0;
+  if (marketCond.condition === "strong_bullish") return 10;
+  if (marketCond.condition === "bullish") return 5;
+  if (marketCond.condition === "bearish") return -10;
+  if (marketCond.condition === "strong_bearish") return -20;
+  return 0;
+}
+
+function sectorScoreAdjustment(sectorCond: ScoringInput["sector"]): number {
+  if (!sectorCond) return 0;
+  if (sectorCond.condition === "strong_bullish") return 8;
+  if (sectorCond.condition === "bullish") return 4;
+  if (sectorCond.condition === "bearish") return -6;
+  if (sectorCond.condition === "strong_bearish") return -12;
+  return 0;
 }
 
 function cloneScores(scores: ScoringOutput): ScoringOutput {
@@ -523,8 +534,19 @@ function cloneScores(scores: ScoringOutput): ScoringOutput {
   };
 }
 
+function collectFeatureAvailability(contributions: ScoreContributions): Record<string, boolean> {
+  const availability: Record<string, boolean> = {};
+  for (const [component, componentContributions] of Object.entries(contributions) as [ScoreComponent, ScoreContribution[]][]) {
+    for (const contribution of componentContributions) {
+      availability[`${component}.${contribution.feature}`] = contribution.available ?? true;
+    }
+  }
+  return availability;
+}
+
 function llmContribution(component: ScoreComponent, adjustment: number, reason: string, highIsGood: boolean = true): ScoreContribution {
   const polarity = adjustment === 0 ? "neutral" : (adjustment > 0) === highIsGood ? "positive" : "negative";
+  const impactMagnitude = Math.abs(adjustment);
   return {
     component,
     feature: "llmAdjustment",
@@ -532,6 +554,8 @@ function llmContribution(component: ScoreComponent, adjustment: number, reason: 
     rawScore: adjustment,
     weight: 1,
     contribution: adjustment,
+    signedImpact: polarity === "positive" ? impactMagnitude : polarity === "negative" ? -impactMagnitude : 0,
+    impactMagnitude,
     polarity,
     reason,
   };

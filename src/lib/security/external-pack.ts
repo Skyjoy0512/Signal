@@ -36,7 +36,7 @@ export function generateExternalPack(
   lines.push("# Signal One-shot External Analysis Pack");
   lines.push("");
   lines.push("あなたは投資分析の上級レビュアーです。");
-  lines.push("以下のSignal分析データをもとに、対象銘柄のEntry可否を批判的にレビューしてください。");
+  lines.push("以下のSignal分析データをもとに、対象銘柄を確認候補として扱うべきか批判的にレビューしてください。");
   lines.push("");
   lines.push("## 目的");
   lines.push("");
@@ -46,10 +46,10 @@ export function generateExternalPack(
 
   lines.push("## 重視する観点");
   lines.push("");
-  lines.push("- 今Entryする優位性はあるか");
-  lines.push("- Entry Timingは妥当か");
+  lines.push("- 今確認候補として扱う優位性はあるか");
+  lines.push("- タイミング評価は妥当か");
   lines.push("- 期待利益目安は現実的か");
-  lines.push("- Stopは妥当か");
+  lines.push("- 無効化ラインは妥当か");
   lines.push("- Risk Rewardは十分か");
   lines.push("- 見送るべき条件は何か");
   lines.push("- 反証条件は明確か");
@@ -60,10 +60,10 @@ export function generateExternalPack(
   lines.push("## 出力形式");
   lines.push("");
   lines.push("1. 結論");
-  lines.push("2. Entryするなら条件");
-  lines.push("3. Entryしない方がいい条件");
+  lines.push("2. 確認候補として扱うなら条件");
+  lines.push("3. 見送る方がいい条件");
   lines.push("4. Expected Upsideの妥当性");
-  lines.push("5. Stopの妥当性");
+  lines.push("5. 無効化ラインの妥当性");
   lines.push("6. 主なリスク");
   lines.push("7. 見落としている可能性");
   lines.push("8. 最終判断");
@@ -90,10 +90,10 @@ export function generateExternalPack(
     const R = snapshot.close;
     lines.push("### 機械式スコア");
     lines.push(`- 機会スコア: ${scores.opportunityScore}/100`);
-    lines.push(`- エントリータイミング: ${scores.entryTimingScore}/100`);
+    lines.push(`- タイミング評価: ${scores.entryTimingScore}/100`);
     lines.push(`- リスク: ${scores.riskScore}/100`);
     lines.push(`- 確信度: ${scores.convictionScore}/100`);
-    lines.push(`- 最終エントリースコア: ${scores.finalEntryScore}/100`);
+    lines.push(`- 最終候補度スコア: ${scores.finalEntryScore}/100`);
     lines.push(`- 戦略タグ: ${scores.strategyTags.join(", ")}`);
     lines.push("");
 
@@ -111,14 +111,21 @@ export function generateExternalPack(
   // Scenario
   if (opts.includeScenario && classification.scenario) {
     const s = classification.scenario;
-    lines.push("### Target / Stop");
-    lines.push(`- Entry: ${s.entryPrice.toLocaleString()}`);
-    lines.push(`- Stop: ${s.stopPrice.toLocaleString()} (${s.downsidePct.toFixed(1)}%)`);
-    lines.push(`- Target (保守): ${s.targetConservative.toLocaleString()} (+${s.upsideConservativePct.toFixed(1)}%)`);
-    lines.push(`- Target (基本): ${s.targetBase.toLocaleString()} (+${s.upsideBasePct.toFixed(1)}%)`);
-    lines.push(`- Target (強気): ${s.targetBull.toLocaleString()} (+${s.upsideBullPct.toFixed(1)}%)`);
+    lines.push("### 想定水準 / 参考ターゲット / 無効化ライン");
+    lines.push(`- 想定水準: ${s.entryPrice.toLocaleString()}`);
+    lines.push(`- 無効化ライン: ${s.stopPrice.toLocaleString()} (${s.downsidePct.toFixed(1)}%)`);
+    lines.push(`- 参考ターゲット (保守): ${s.targetConservative.toLocaleString()} (+${s.upsideConservativePct.toFixed(1)}%)`);
+    lines.push(`- 参考ターゲット (基本): ${s.targetBase.toLocaleString()} (+${s.upsideBasePct.toFixed(1)}%)`);
+    lines.push(`- 参考ターゲット (強気): ${s.targetBull.toLocaleString()} (+${s.upsideBullPct.toFixed(1)}%)`);
     lines.push(`- RR (基本): ${s.riskRewardBase.toFixed(1)}`);
     lines.push(`- 想定保有期間: ${s.expectedHoldingPeriod}`);
+    lines.push(`- Scenario Quality: ${s.scenarioQuality.confidence}/100`);
+    lines.push(`- ATR Source: ${s.scenarioQuality.atrSource}`);
+    lines.push(`- Swing Sources: high=${s.scenarioQuality.swingHighSource}, low=${s.scenarioQuality.swingLowSource}`);
+    if (s.scenarioQuality.warnings.length > 0) {
+      lines.push("- Scenario Quality Warnings:");
+      for (const warning of s.scenarioQuality.warnings) lines.push(`  - ${warning}`);
+    }
     lines.push("");
   }
 

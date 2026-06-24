@@ -10,10 +10,22 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
+    "verify": "npm run typecheck && npm test && npm run lint && npm run build && npm run verify:ui && APP_ADMIN_TOKEN=secret APP_UNDER_TEST_ADMIN_TOKEN=secret npm run verify:ui && npm run verify:api",
+    "verify:api": "node scripts/verify-api.mjs",
+    "verify:db": "node scripts/verify-db.mjs",
+    "verify:ui": "node scripts/verify-ui.mjs",
     "db:start": "SUPABASE_TELEMETRY_DISABLED=1 supabase start",
     "db:status": "SUPABASE_TELEMETRY_DISABLED=1 supabase status",
     "db:reset": "SUPABASE_TELEMETRY_DISABLED=1 supabase db reset",
-    "fundamentals:seed": "node scripts/seed-fundamentals.mjs"
+    "deploy:bootstrap": "node scripts/bootstrap-hosting.mjs",
+    "deploy:check-env": "node scripts/check-production-env.mjs",
+    "deploy:supabase-status": "node scripts/check-supabase-hosted.mjs",
+    "deploy:sync-supabase-env": "node scripts/sync-vercel-supabase-env.mjs",
+    "deploy:smoke": "node scripts/smoke-production.mjs",
+    "review:pack": "node scripts/create-review-pack.mjs",
+    "fundamentals:seed": "node scripts/seed-fundamentals.mjs",
+    "fundamentals:refresh-market": "FUNDAMENTALS_SEED_MODE=market node scripts/seed-fundamentals.mjs",
+    "fundamentals:import-financials": "node scripts/import-financial-statements.mjs"
   },
   "dependencies": {
     "@radix-ui/react-slot": "^1.3.0",
@@ -30,6 +42,9 @@
     "tailwind-merge": "^3.6.0",
     "trading-signals": "^7.4.3"
   },
+  "overrides": {
+    "postcss": "8.5.15"
+  },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
@@ -38,6 +53,7 @@
     "@vitejs/plugin-react": "^6.0.2",
     "eslint": "^9",
     "eslint-config-next": "16.2.9",
+    "playwright": "^1.61.0",
     "tailwindcss": "^4",
     "typescript": "^5",
     "vitest": "^4.1.9"

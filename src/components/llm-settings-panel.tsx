@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { Bot, CheckCircle2, FlaskConical, Save, XCircle } from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
+import { Bot, CheckCircle2, FlaskConical, RefreshCw, Save, XCircle } from "lucide-react";
 
 type Provider = "deepseek" | "openai-compatible";
 
@@ -48,22 +48,45 @@ const PRESETS: Record<Provider, Pick<LlmSettingsState, "baseUrl" | "reasoningMod
 
 export function LlmSettingsPanel() {
   const [settings, setSettings] = useState<LlmSettingsState>(DEFAULTS);
+  const [adminToken, setAdminToken] = useState("");
   const [status, setStatus] = useState<string>("読み込み中");
   const [busy, setBusy] = useState(false);
   const [testResult, setTestResult] = useState<string | null>(null);
 
-  useEffect(() => {
-    fetch("/api/settings/llm")
-      .then((res) => res.json())
-      .then((data) => {
-        setSettings({ ...DEFAULTS, ...data, apiKey: "" });
-        setStatus(data.source === "database" ? "GUI設定を使用中" : "環境変数を使用中");
-      })
-      .catch((error) => setStatus(error instanceof Error ? error.message : "読み込み失敗"));
+  const loadSettings = useCallback(async (token: string) => {
+    setBusy(true);
+    try {
+      const res = await fetch("/api/settings/llm", { headers: adminHeaders(token) });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? data.message ?? "読み込み失敗");
+      setSettings({ ...DEFAULTS, ...data, apiKey: "" });
+      setStatus(data.source === "database" ? "GUI設定を使用中" : "環境変数を使用中");
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : "読み込み失敗");
+    } finally {
+      setBusy(false);
+    }
   }, []);
+
+  useEffect(() => {
+    const storedToken = localStorage.getItem("signal-admin-token") ?? "";
+    queueMicrotask(() => {
+      setAdminToken(storedToken);
+      void loadSettings(storedToken);
+    });
+  }, [loadSettings]);
 
   function update<K extends keyof LlmSettingsState>(key: K, value: LlmSettingsState[K]) {
     setSettings((current) => ({ ...current, [key]: value }));
+  }
+
+  function updateAdminToken(value: string) {
+    setAdminToken(value);
+    if (value) {
+      localStorage.setItem("signal-admin-token", value);
+    } else {
+      localStorage.removeItem("signal-admin-token");
+    }
   }
 
   function applyPreset(provider: Provider) {
@@ -74,9 +97,9 @@ export function LlmSettingsPanel() {
     setBusy(true);
     setTestResult(null);
     try {
-      const res = await fetch("/api/settings/llm", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(settings) });
+      const res = await fetch("/api/settings/llm", { method: "POST", headers: { "Content-Type": "application/json", ...adminHeaders(adminToken) }, body: JSON.stringify(settings) });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? "保存に失敗しました");
+      if (!res.ok) throw new Error(data.error ?? data.message ?? "保存に失敗しました");
       setSettings({ ...settings, ...data, apiKey: "" });
       setStatus("保存済み");
     } catch (error) {
@@ -90,8 +113,9 @@ export function LlmSettingsPanel() {
     setBusy(true);
     setTestResult(null);
     try {
-      const res = await fetch("/api/settings/llm/test", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(settings) });
+      const res = await fetch("/api/settings/llm/test", { method: "POST", headers: { "Content-Type": "application/json", ...adminHeaders(adminToken) }, body: JSON.stringify(settings) });
       const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? data.message ?? "接続テストに失敗しました");
       setTestResult(data.ok ? `接続成功: ${data.model} / ${data.latencyMs}ms` : `接続失敗: ${data.error ?? "unknown"}`);
     } catch (error) {
       setTestResult(error instanceof Error ? error.message : "接続テストに失敗しました");
@@ -136,6 +160,9 @@ export function LlmSettingsPanel() {
         <Field label="API key">
           <input value={settings.apiKey} onChange={(e) => update("apiKey", e.target.value)} placeholder={settings.apiKeySet ? settings.apiKeyPreview ?? "保存済み" : "未設定"} type="password" className="settings-input" />
         </Field>
+        <Field label="Admin token">
+          <input value={adminToken} onChange={(e) => updateAdminToken(e.target.value)} placeholder="APP_ADMIN_TOKEN" type="password" className="settings-input" />
+        </Field>
       </div>
 
       <div className="grid-stats" style={{ marginBottom: 12 }}>
@@ -153,10 +180,15 @@ export function LlmSettingsPanel() {
       <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
         <button className="btn btn-primary" onClick={save} disabled={busy}><Save size={14} />保存</button>
         <button className="btn btn-ghost" onClick={test} disabled={busy}><FlaskConical size={14} />接続テスト</button>
+        <button className="btn btn-ghost" onClick={() => void loadSettings(adminToken)} disabled={busy}><RefreshCw size={14} />再読み込み</button>
         {testResult ? <span className={testResult.startsWith("接続成功") ? "badge badge-outline" : "badge badge-ember"}>{testResult.startsWith("接続成功") ? <CheckCircle2 size={12} /> : <XCircle size={12} />}{testResult}</span> : null}
       </div>
     </div>
   );
+}
+
+function adminHeaders(token: string): HeadersInit {
+  return token.trim() ? { "x-signal-admin-token": token.trim() } : {};
 }
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {

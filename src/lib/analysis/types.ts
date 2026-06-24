@@ -17,6 +17,29 @@ export interface AnalysisSubject {
   priceHistory?: Array<{ close: number }>;
 }
 
+export interface AnalysisInputSnapshotV1 {
+  schemaVersion: "analysis-input-v1";
+  scoreEngineVersion: string;
+  scoringConfigVersion: string;
+  capturedAt: string;
+  symbol: string;
+  symbolName?: string;
+  marketDataAsOf?: string;
+  dataSources: Array<{ name: string; asOf?: string; confidence?: number }>;
+  features: {
+    technical: unknown;
+    fundamentals?: unknown;
+    layers: unknown;
+    events?: unknown;
+  };
+  featureAvailability: Record<string, boolean>;
+  scenarioQuality?: {
+    atrSource: "actual" | "estimated" | "unavailable";
+    confidence: number;
+    warnings: string[];
+  };
+}
+
 export interface LogicAnalysisResult {
   scores: ScoringOutput;
   classification: SignalClassification;

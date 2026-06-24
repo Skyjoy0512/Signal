@@ -2,6 +2,7 @@ import Image from "next/image";
 import type { CSSProperties } from "react";
 import { BarChart3, CalendarClock, Scale, Target, Trophy } from "lucide-react";
 import { ScoreRing } from "@/components/visual-primitives";
+import { ReviewQueue } from "@/components/review-queue";
 
 export default function ReviewPage() {
   return (
@@ -9,12 +10,15 @@ export default function ReviewPage() {
       <div className="page-header">
         <h1 className="page-title">レビュー / 結果</h1>
         <p className="page-subtitle">1週間 · 1ヶ月 · 3ヶ月の結果追跡とベンチマーク比較</p>
+        <p className="meaning-note">Signalは投資助言や売買指示ではなく、仮説とレビュー観点を記録するための個人利用ツールです。</p>
       </div>
+
+      <ReviewQueue />
 
       <div className="image-context-grid">
         <ContextCard
           title="1週間後"
-          copy="初動、損切り接近、出来高変化を確認します"
+          copy="初動、無効化ライン接近、出来高変化を確認します"
           image="https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=900&q=80&fit=crop"
         />
         <ContextCard
@@ -57,13 +61,13 @@ export default function ReviewPage() {
               <span className="semantic-icon"><CalendarClock size={18} /></span>
               <div style={{ fontSize: 14, fontWeight: 600 }}>保有後の定点観測</div>
             </div>
-            <p className="meaning-note">1週間 / 1ヶ月 / 3ヶ月の節目で、最大含み益(MFE)・最大含み損(MAE)・日経平均比較を確認します。</p>
+            <p className="meaning-note">1週間 / 1ヶ月 / 3ヶ月の節目で、最大有利変動(MFE)・最大不利変動(MAE)・日経平均比較を確認します。</p>
           </div>
           <ScoreRing value={0} label="準備中" />
         </div>
         <div className="review-timeline">
           {[
-            { label: "1W", title: "初動確認", copy: "Entry後の値動きと損切りライン接近を確認" },
+            { label: "1W", title: "初動確認", copy: "想定水準到達後の値動きと無効化ライン接近を確認" },
             { label: "1M", title: "仮説検証", copy: "材料継続、業界地合い、ベンチマーク差を確認" },
             { label: "3M", title: "結果判定", copy: "MFE / MAE とRR達成度を次回判断へ反映" },
           ].map((step) => (

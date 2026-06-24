@@ -1,4 +1,5 @@
 import crypto from "crypto";
+import { isIP } from "net";
 import { createClient } from "../supabase/server";
 import { ChatCompletionsProvider } from "./chat-completions-provider";
 import type { OrchestratorConfig } from "./orchestrator";
@@ -75,6 +76,9 @@ export async function getLlmSettingsView(): Promise<LlmSettingsView> {
 }
 
 export async function saveLlmSettings(input: LlmSettingsInput): Promise<LlmSettingsView> {
+  input = validateLlmSettingsInput(input);
+  assertSupabaseConfiguredForWrite();
+  assertEncryptionKeyConfiguredForWrite();
   const existing = await getStoredSettingsRow();
   const apiKey = input.apiKey?.trim();
   const encrypted = apiKey ? encryptSecret(apiKey) : existing?.api_key_ciphertext ?? null;
@@ -133,6 +137,7 @@ export async function testLlmSettings(input?: LlmSettingsInput): Promise<{ ok: b
     let provider: LlmProvider;
     let model: string;
     if (input) {
+      input = validateLlmSettingsInput(input, { requireApiKey: false });
       const apiKey = input.apiKey?.trim() || envApiKey(input.provider);
       provider = new ChatCompletionsProvider({
         providerType: input.provider === "deepseek" ? "deepseek" : "openai-compatible",
@@ -161,11 +166,81 @@ export async function testLlmSettings(input?: LlmSettingsInput): Promise<{ ok: b
   }
 }
 
+export function validateLlmSettingsInput(input: LlmSettingsInput, options: { requireApiKey?: boolean } = {}): LlmSettingsInput {
+  if (input.provider !== "deepseek" && input.provider !== "openai-compatible") {
+    throw new Error("Invalid LLM provider");
+  }
+  const maxModelLength = 100;
+  for (const [label, value] of [
+    ["reasoningModel", input.reasoningModel],
+    ["workerModel", input.workerModel],
+    ["criticModel", input.criticModel],
+  ] as const) {
+    if (!value?.trim()) throw new Error(`${label} is required`);
+    if (value.trim().length > maxModelLength) throw new Error(`${label} is too long`);
+  }
+  for (const [label, value] of [
+    ["reasoningTemperature", input.reasoningTemperature],
+    ["criticTemperature", input.criticTemperature],
+  ] as const) {
+    if (!Number.isFinite(value) || value < 0 || value > 1.5) throw new Error(`${label} must be between 0 and 1.5`);
+  }
+  for (const [label, value] of [
+    ["inputCostPerMillion", input.inputCostPerMillion],
+    ["outputCostPerMillion", input.outputCostPerMillion],
+    ["dailyCostLimitUsd", input.dailyCostLimitUsd],
+  ] as const) {
+    if (!Number.isFinite(value) || value < 0) throw new Error(`${label} must be 0 or greater`);
+    if (value > 10000) throw new Error(`${label} is too high`);
+  }
+  const baseUrl = input.baseUrl?.trim() || defaultBaseUrl(input.provider);
+  validateBaseUrl(baseUrl);
+  if (options.requireApiKey && !input.apiKey?.trim()) throw new Error("API key is required");
+  return { ...input, baseUrl };
+}
+
+function validateBaseUrl(value: string): void {
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch {
+    throw new Error("baseUrl must be a valid URL");
+  }
+  if (url.protocol !== "https:") throw new Error("baseUrl must use https");
+  const hostname = url.hostname.toLowerCase();
+  if (hostname === "localhost" || hostname.endsWith(".localhost")) throw new Error("baseUrl cannot target localhost");
+  if (hostname === "metadata.google.internal") throw new Error("baseUrl cannot target metadata services");
+  const ipVersion = isIP(hostname);
+  if (ipVersion && isPrivateOrMetadataIp(hostname)) throw new Error("baseUrl cannot target private or metadata IPs");
+}
+
+function isPrivateOrMetadataIp(hostname: string): boolean {
+  if (hostname === "169.254.169.254" || hostname === "0.0.0.0" || hostname === "127.0.0.1") return true;
+  if (hostname.startsWith("10.") || hostname.startsWith("192.168.")) return true;
+  const parts = hostname.split(".").map((part) => Number(part));
+  if (parts.length === 4 && parts.every((part) => Number.isInteger(part))) {
+    if (parts[0] === 172 && parts[1] >= 16 && parts[1] <= 31) return true;
+    if (parts[0] === 100 && parts[1] >= 64 && parts[1] <= 127) return true;
+  }
+  return hostname === "::1" || hostname.toLowerCase().startsWith("fc") || hostname.toLowerCase().startsWith("fd") || hostname.toLowerCase().startsWith("fe80");
+}
+
 async function getStoredSettingsRow(): Promise<LlmSettingsRow | null> {
+  if (!hasSupabaseServerEnv()) return null;
   const supabase = await createClient();
   const { data, error } = await supabase.from("llm_settings").select("*").eq("id", "default").maybeSingle();
   if (error) return null;
   return data as LlmSettingsRow | null;
+}
+
+function hasSupabaseServerEnv(): boolean {
+  return Boolean(process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY);
+}
+
+function assertSupabaseConfiguredForWrite(): void {
+  if (!hasSupabaseServerEnv()) {
+    throw new Error("SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are required to save GUI-managed LLM settings");
+  }
 }
 
 function envSettingsView(): LlmSettingsView {
@@ -212,8 +287,15 @@ function decryptSecret(value: string): string {
 }
 
 function encryptionKey(): Buffer {
+  assertEncryptionKeyConfiguredForWrite();
   const seed = process.env.APP_SETTINGS_ENCRYPTION_KEY ?? process.env.SUPABASE_SERVICE_ROLE_KEY ?? "signal-local-dev-settings-key";
   return crypto.createHash("sha256").update(seed).digest();
+}
+
+function assertEncryptionKeyConfiguredForWrite(): void {
+  if (process.env.NODE_ENV === "production" && !process.env.APP_SETTINGS_ENCRYPTION_KEY) {
+    throw new Error("APP_SETTINGS_ENCRYPTION_KEY is required in production");
+  }
 }
 
 function maskKey(value: string): string {

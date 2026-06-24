@@ -1,11 +1,16 @@
 import { NextResponse } from "next/server";
+import { requireAdminRequest } from "@/lib/api/auth";
+import { errorResponse } from "@/lib/api/response";
 import { runMockScan } from "@/lib/mock/provider";
 
-export async function POST() {
+export async function POST(request: Request) {
+  const unauthorized = requireAdminRequest(request);
+  if (unauthorized) return unauthorized;
   try {
     const result = await runMockScan();
 
     return NextResponse.json({
+      ok: true,
       success: true,
       date: result.context.date,
       summary: {
@@ -18,6 +23,6 @@ export async function POST() {
       errors: result.errors,
     });
   } catch {
-    return NextResponse.json({ error: "Scan failed" }, { status: 500 });
+    return errorResponse("daily_scan_failed", "Scan failed", 500);
   }
 }

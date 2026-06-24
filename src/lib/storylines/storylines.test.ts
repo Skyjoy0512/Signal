@@ -62,10 +62,14 @@ function scored(overrides: Partial<ScoredSymbol> = {}): ScoredSymbol {
       },
       contributions: {
         opportunity: [],
-        entryTiming: [{ component: "entryTiming", feature: "setup", label: "Setup", rawScore: 75, weight: 0.3, contribution: 22.5, polarity: "positive", reason: "setup ok" }],
-        risk: [{ component: "risk", feature: "volatility", label: "Volatility", rawScore: 40, weight: 0.16, contribution: 6.4, polarity: "positive", reason: "low volatility" }],
+        entryTiming: [{ component: "entryTiming", feature: "setup", label: "Setup", rawScore: 75, weight: 0.3, contribution: 22.5, signedImpact: 22.5, impactMagnitude: 22.5, polarity: "positive", reason: "setup ok" }],
+        risk: [{ component: "risk", feature: "volatility", label: "Volatility", rawScore: 40, weight: 0.16, contribution: 6.4, signedImpact: 6.4, impactMagnitude: 6.4, polarity: "positive", reason: "low volatility" }],
         conviction: [],
         finalEntry: [],
+      },
+      featureAvailability: {
+        "entryTiming.setup": true,
+        "risk.volatility": true,
       },
     },
     classification: {
@@ -88,6 +92,13 @@ function scored(overrides: Partial<ScoredSymbol> = {}): ScoredSymbol {
         riskRewardBase: 1.84,
         expectedHoldingPeriod: "2W-2M",
         calculationMethod: "atr_breakout_v2",
+        scenarioQuality: {
+          atrSource: "actual",
+          swingHighSource: "actual",
+          swingLowSource: "actual",
+          confidence: 95,
+          warnings: [],
+        },
       },
     },
   };
@@ -99,8 +110,40 @@ describe("generateStorylineSet", () => {
     const result = generateStorylineSet({ scored: scored(), dataConfidence: 85, generatedAt: "2026-06-21T00:00:00.000Z" });
     expect(result.status).toBe("new");
     expect(result.activeScenario).toBe("base");
+    expect(result.probabilityMethod).toBe("rule-normalized-v1");
     expect(result.scenarios.map((scenario) => scenario.kind)).toEqual(["best", "base", "conservative", "worst"]);
+    expect(result.scenarios.reduce((sum, scenario) => sum + scenario.probabilityPct, 0)).toBe(100);
+    expect(result.scenarios.every((scenario) => scenario.rawWeight && scenario.rawWeight > 0)).toBe(true);
     expect(result.scenarios.find((scenario) => scenario.kind === "best")?.targetPrice).toBeGreaterThan(3280);
+  });
+
+  it("reduces optimistic probability and raises defensive scenarios when data confidence is low", () => {
+    const highConfidence = generateStorylineSet({ scored: scored(), dataConfidence: 85, generatedAt: "2026-06-21T00:00:00.000Z" });
+    const lowConfidence = generateStorylineSet({ scored: scored(), dataConfidence: 45, generatedAt: "2026-06-21T00:00:00.000Z" });
+    expect(lowConfidence.scenarios.reduce((sum, scenario) => sum + scenario.probabilityPct, 0)).toBe(100);
+    expect(lowConfidence.scenarios.find((scenario) => scenario.kind === "best")?.probabilityPct).toBeLessThan(highConfidence.scenarios.find((scenario) => scenario.kind === "best")?.probabilityPct ?? 0);
+    const highDefensive = (highConfidence.scenarios.find((scenario) => scenario.kind === "conservative")?.probabilityPct ?? 0) + (highConfidence.scenarios.find((scenario) => scenario.kind === "worst")?.probabilityPct ?? 0);
+    const lowDefensive = (lowConfidence.scenarios.find((scenario) => scenario.kind === "conservative")?.probabilityPct ?? 0) + (lowConfidence.scenarios.find((scenario) => scenario.kind === "worst")?.probabilityPct ?? 0);
+    expect(lowDefensive).toBeGreaterThan(highDefensive);
+  });
+
+  it("raises conservative and worst probabilities when an event blocker is active", () => {
+    const normal = generateStorylineSet({ scored: scored(), dataConfidence: 85, generatedAt: "2026-06-21T00:00:00.000Z" });
+    const blocked = generateStorylineSet({
+      scored: scored({
+        classification: {
+          ...scored().classification,
+          gates: { eventBlockerGate: false },
+          gateDetails: [{ key: "eventBlockerGate", label: "Event blocker", passed: false, actual: true, threshold: false, severity: "blocker", reason: "event blocker is active" }],
+        },
+      }),
+      dataConfidence: 85,
+      generatedAt: "2026-06-21T00:00:00.000Z",
+    });
+    const normalDefensive = (normal.scenarios.find((scenario) => scenario.kind === "conservative")?.probabilityPct ?? 0) + (normal.scenarios.find((scenario) => scenario.kind === "worst")?.probabilityPct ?? 0);
+    const blockedDefensive = (blocked.scenarios.find((scenario) => scenario.kind === "conservative")?.probabilityPct ?? 0) + (blocked.scenarios.find((scenario) => scenario.kind === "worst")?.probabilityPct ?? 0);
+    expect(blocked.scenarios.reduce((sum, scenario) => sum + scenario.probabilityPct, 0)).toBe(100);
+    expect(blockedDefensive).toBeGreaterThan(normalDefensive);
   });
 
   it("marks the storyline revised when the active scenario changes", () => {
@@ -182,8 +225,10 @@ describe("storylineSetFromRows", () => {
 
     expect(set.status).toBe("revised");
     expect(set.activeScenario).toBe("conservative");
+    expect(set.probabilityMethod).toBe("legacy");
     expect(set.scoreSnapshot.strategyTags).toEqual(["pullback"]);
     expect(set.scenarios[0].kind).toBe("worst");
+    expect(set.scenarios[0].normalizedProbabilityPct).toBe(24);
     expect(set.scenarios[0].riskNotes).toEqual(["volatility"]);
   });
 });

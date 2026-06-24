@@ -5,7 +5,6 @@ import {
   BarChart,
   CartesianGrid,
   Cell,
-  ResponsiveContainer,
   Scatter,
   ScatterChart,
   Tooltip,
@@ -37,8 +36,8 @@ export function IndustryRevenueRankingChart({ rows }: { rows: EnrichedCompany[] 
 
   return (
     <ChartContainer className="h-72">
-      <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
-        <BarChart data={topRows} layout="vertical" margin={{ top: 8, right: 22, left: 60, bottom: 0 }}>
+      {({ width, height }) => (
+        <BarChart width={width} height={height} data={topRows} layout="vertical" margin={{ top: 8, right: 22, left: 60, bottom: 0 }}>
           <CartesianGrid stroke="#e5eaf1" horizontal={false} />
           <XAxis type="number" tick={{ fontSize: 10, fill: slate }} tickLine={false} axisLine={false} />
           <YAxis type="category" dataKey="name" width={116} tick={{ fontSize: 11, fill: "#334155" }} tickLine={false} axisLine={false} />
@@ -54,7 +53,7 @@ export function IndustryRevenueRankingChart({ rows }: { rows: EnrichedCompany[] 
             ))}
           </Bar>
         </BarChart>
-      </ResponsiveContainer>
+      )}
     </ChartContainer>
   );
 }
@@ -70,8 +69,8 @@ export function ProfitabilityScatter({ rows }: { rows: EnrichedCompany[] }) {
 
   return (
     <ChartContainer className="h-72">
-      <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
-        <ScatterChart margin={{ top: 10, right: 10, bottom: 4, left: -14 }}>
+      {({ width, height }) => (
+        <ScatterChart width={width} height={height} margin={{ top: 10, right: 10, bottom: 4, left: -14 }}>
           <CartesianGrid stroke="#e5eaf1" />
           <XAxis
             type="number"
@@ -105,7 +104,7 @@ export function ProfitabilityScatter({ rows }: { rows: EnrichedCompany[] }) {
           />
           <Scatter data={data} fill={green} />
         </ScatterChart>
-      </ResponsiveContainer>
+      )}
     </ChartContainer>
   );
 }
@@ -128,8 +127,8 @@ export function PeerMetricBars({
 
   return (
     <ChartContainer className="h-56">
-      <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
-        <BarChart data={data} layout="vertical" margin={{ top: 8, right: 18, left: 58, bottom: 0 }}>
+      {({ width, height }) => (
+        <BarChart width={width} height={height} data={data} layout="vertical" margin={{ top: 8, right: 18, left: 58, bottom: 0 }}>
           <CartesianGrid stroke="#e5eaf1" horizontal={false} />
           <XAxis type="number" tick={{ fontSize: 10, fill: slate }} tickLine={false} axisLine={false} />
           <YAxis type="category" dataKey="name" width={108} tick={{ fontSize: 11, fill: "#334155" }} tickLine={false} axisLine={false} />
@@ -144,7 +143,7 @@ export function PeerMetricBars({
             ))}
           </Bar>
         </BarChart>
-      </ResponsiveContainer>
+      )}
     </ChartContainer>
   );
 }

@@ -52,6 +52,9 @@ create index if not exists score_snapshots_analysis_run_id_idx
 alter table public.analysis_runs enable row level security;
 alter table public.score_snapshots enable row level security;
 
+grant select, insert, update, delete on table public.analysis_runs to service_role;
+grant select, insert, update, delete on table public.score_snapshots to service_role;
+
 do $$
 begin
   if not exists (
@@ -63,8 +66,9 @@ begin
     create policy analysis_runs_service_role_all
       on public.analysis_runs
       for all
-      using (auth.role() = 'service_role')
-      with check (auth.role() = 'service_role');
+      to service_role
+      using (true)
+      with check (true);
   end if;
 
   if not exists (
@@ -76,7 +80,8 @@ begin
     create policy score_snapshots_service_role_all
       on public.score_snapshots
       for all
-      using (auth.role() = 'service_role')
-      with check (auth.role() = 'service_role');
+      to service_role
+      using (true)
+      with check (true);
   end if;
 end $$;

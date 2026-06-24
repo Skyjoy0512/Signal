@@ -1,0 +1,155 @@
+あなたはシニアソフトウェアアーキテクト兼、投資分析システムの設計レビュー担当です。
+以下のGitHubリポジトリを多角的にレビューしてください。
+
+Repository:
+https://github.com/Skyjoy0512/Signal
+
+プロダクト名:
+Signal
+
+前提:
+- 個人利用の投資判断支援アプリです。
+- 会社利用や業務利用は想定していません。
+- 売買を自動執行するものではなく、候補銘柄の分析、ストーリーライン整理、判断支援、レビュー支援が目的です。
+- これは投資助言の依頼ではありません。
+- レビュー対象は、ソフトウェア設計、分析ロジック、データ設計、UI/UX、保守性、テスト容易性、セキュリティ、将来のLLM差し替え容易性です。
+- 重要な設計思想として、分析ロジックレイヤーとLLMプロバイダーレイヤーを独立させたいです。
+- 将来、より強いフロンティアLLMにAPIを繋ぎ替えたとき、分析レビュー品質が上がる余地を残したいです。
+- ただしLLMを変えたときの性能差を定量比較する仕組み自体は、現時点では優先しません。
+
+今回レビューしてほしい主な観点:
+
+1. フロントエンドUI/UX
+- Next.js App Router構成、画面遷移、ナビゲーション、情報設計は適切か。
+- 個人投資家が「今どこを見ればよいか」を直感的に理解できるUIになっているか。
+- スコア、シグナル、リスク、ストーリーライン、ファンダメンタルズの見せ方が過度に断定的になっていないか。
+- チャート、候補銘柄、業種ドリルダウン、比較画面、レビュー画面の改善余地は何か。
+- 投資判断支援アプリとして、誤解を招く表現や過度に強い推奨になりそうな箇所がないか。
+
+2. 全体アーキテクチャ / リファクタリング余地
+- Next.jsアプリ、Supabase、スコアリング、分析エンジン、LLM連携、ストーリーライン生成の責務分離は適切か。
+- 分析ロジックレイヤーとLLMプロバイダーレイヤーの独立性は十分か。
+- 今後LLMプロバイダーやモデルを切り替えるとき、最小変更で済む設計になっているか。
+- `src/app`, `src/components`, `src/lib/scoring`, `src/lib/analysis`, `src/lib/llm`, `src/lib/storylines`, `src/lib/jobs`, `src/lib/supabase` 周辺で、抽象化しすぎ・不足・密結合・命名不整合・型設計の弱さがないか。
+- UI側とバックエンド/分析ロジック側の境界が曖昧な箇所がないか。
+
+3. バックエンド / API / Supabase
+- API routesの責務、エラーハンドリング、入力検証、認可、環境変数の扱いは十分か。
+- Supabase migration設計、analysis_runs、score_snapshots、llm_settings、storyline_sets、storyline_scenarios、universe_members の設計は妥当か。
+- 将来的に「過去の予測/ストーリーラインと実際の価格推移」を比較して改善するために、足りないテーブルやカラムは何か。
+- お気に入り銘柄や限定ユニバースから始めて、後で対象銘柄を広げる設計として問題がないか。
+- RLS、service_role前提、APIキー保存、暗号化周りに危険や改善余地がないか。
+
+4. 分析ロジック高度化
+- 現在のスコアリング、リスク評価、シグナル判定、戦略別Target/Stop/RR、ストーリーライン生成ロジックに改善余地があるか。
+- `opportunity`, `entryTiming`, `risk`, `conviction`, `finalEntryScore` の設計は妥当か。
+- スコア重み付け、signal classification、strategyTags、日本株向けの特徴量、リスク評価、バックテスト/検証可能性、データ品質とconfidenceの扱いに不足がないか。
+- Best/Base/Conservative/Worstのストーリーラインを今後どう高度化すべきか。
+- 時間経過でストーリーラインが変わった場合に、どのようなデータを保存し、どのように改訂精度を上げるべきか。
+- ルールベースで固定すべき部分とLLMに任せるべき部分の線引きは適切か。
+
+5. LLM活用設計
+- LLMへ渡す入力スナップショット、scoreContributions、gateDetails、decisionReasons、scenario情報は十分か。
+- LLMが強くなるほど分析レビュー精度が上がる構造になっているか。
+- LLMに任せるべき領域と、ルールベースで守るべき領域の線引きは適切か。
+- LLMの楽観的な上方修正を抑えるガードは十分か。
+- Reasoning/Criticのプロンプト設計、JSON schema、repair設計に改善余地があるか。
+- LLM出力をスコアに反映する安全性、hallucinationや過剰補正の制御は十分か。
+
+6. データ/DB/履歴/再分析設計
+- Supabase schema、signal履歴、score breakdown保存、LLM run保存、バックテストや評価ログに必要なデータは十分か。
+- 将来的な分析改善に必要なデータ蓄積設計になっているか。
+- ファンダメンタル、テクニカル、出来高、マーケット/セクター/テーマ、イベント、データ信頼度の扱いに不足や危険な単純化がないか。
+
+7. テスト / 品質保証
+- 既存テストの不足、追加すべきユニットテスト/統合テスト/回帰テストを指摘してください。
+- 投資分析ロジックに対して、どのようなfixtureやケースを増やすべきか。
+- スコアリング変更時に事故を防ぐためのテスト戦略を提案してください。
+- UIチャート、API routes、Supabase fallback、LLM provider fallbackの回帰テスト候補を提案してください。
+
+8. 追加した方がよい機能
+- 個人投資家向けの判断支援として、現時点のロードマップに追加した方がよい機能を提案してください。
+- 例: ポートフォリオ文脈、保有銘柄の再評価、決算/イベント前後の警戒、シナリオ改訂通知、外部レビュー用パック、ウォッチリスト管理、バックテスト、レビューキューなど。
+- ただし、最初から大きすぎる実装ではなく、段階的に実装しやすい順番で提案してください。
+
+直近差分:
+- `src/components/ui/chart.tsx`
+- `src/components/candidate-visuals.tsx`
+- `src/components/fundamental-visuals.tsx`
+
+直近差分では、Rechartsの`ResponsiveContainer`を使わず、`ChartContainer`で`ResizeObserver`により実測した`width`/`height`を子チャートに渡す実装に変更しています。
+
+主要ディレクトリ:
+- `src/app`: 画面とAPI routes
+- `src/components`: UIコンポーネント
+- `src/lib/analysis`: 分析エンジン
+- `src/lib/scoring`: スコアリング、シグナル検出
+- `src/lib/intelligence`: 市場・セクター・銘柄レイヤー
+- `src/lib/fundamentals`: ファンダメンタルズデータ
+- `src/lib/llm`: LLM連携
+- `src/lib/supabase`: DBクライアント/リポジトリ
+- `src/lib/storylines`: ストーリーライン生成/永続化
+- `src/lib/jobs`: 日次スキャンなどのジョブ
+- `supabase/migrations`: DBスキーマ
+
+検証済み:
+- `npm run typecheck`
+- `npm test`
+- `npm run lint`
+- `npm run build`
+
+アウトプット形式:
+
+以下の形式で、実装担当のCodexにそのまま渡せるレベルで出してください。
+
+## Executive Summary
+- 重要な結論を短く。
+
+## High Priority Findings
+- 重大な設計/品質/分析ロジック上の問題。
+- できればファイルパスや該当モジュール名を明記。
+- なぜ問題か、どう直すべきかを具体的に。
+
+## Frontend / UX Findings
+- UI/UX、情報設計、画面構成、チャート、導線の改善点。
+- 投資判断支援として誤解を避ける表示改善案。
+
+## Backend / API / Supabase Findings
+- API routes、DB schema、RLS、環境変数、秘密情報、fallback設計の改善点。
+
+## Refactoring Plan
+- 優先順位付きで、段階的なリファクタリング案。
+- 各ステップは小さめのPR/コミット単位に分けてください。
+
+## Analysis Logic Improvements
+- スコアリング、リスク評価、ストーリーライン、シグナル判定の改善案。
+- 可能なら「すぐ実装」「次に実装」「後で検討」に分けてください。
+
+## LLM Integration Improvements
+- フロンティアモデルに繋ぎ替えた時に分析精度が上がりやすくなる改善案。
+- LLMに渡すべき追加情報、守るべきガード、プロンプト改善案。
+
+## Database / History Design Improvements
+- 履歴保存、ストーリーライン改訂、将来の精度改善に必要なDB/データ設計。
+
+## Suggested New Features
+- 個人利用前提で追加価値が高い機能候補。
+- 実装優先度順に。
+
+## Test Plan Improvements
+- 追加すべきテスト、fixture、回帰テスト、統合テスト。
+
+## Concrete Implementation Instructions for Codex
+- Codexに渡すための具体的な実装指示。
+- ファイル単位、関数単位、テスト単位でなるべく具体的に。
+- P0/P1/P2/P3の優先度を付けてください。
+- 各タスクには、対象ファイル、現在の問題、変更内容、受け入れ条件、追加/更新すべきテストを含めてください。
+
+## Risks / Cautions
+- 投資助言っぽくなりすぎる表現、過度な自動化、データ品質、セキュリティ、秘密情報管理などの注意点。
+
+レビューの注意:
+- ただの一般論ではなく、このレポジトリの現在の構造を読んだ上で、具体的に指摘してください。
+- 一気に大規模な作り直しではなく、今の実装を活かして段階的に改善する提案を優先してください。
+- 実装担当者が迷わないように、最終的には具体的な作業指示まで落とし込んでください。
+- 日本語で出力してください。

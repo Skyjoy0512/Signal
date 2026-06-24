@@ -93,13 +93,14 @@ describe("notification templates", () => {
       opportunityScore: 78, reason: "強い上昇トレンド", keyRisks: ["為替リスク"],
     };
     const msg = buildInstantAlert(data);
-    expect(msg).toContain("Signal Strong Entry");
+    expect(msg).toContain("Signal 最優先レビュー候補");
     expect(msg).toContain("Toyota");
+    expect(msg).toContain("想定水準");
     expect(msg).toContain("為替リスク");
   });
 
   it("builds webhook reply", () => {
-    expect(buildWebhookReply("entered", "7203.T", "A")).toContain("記録しました");
+    expect(buildWebhookReply("entered", "7203.T", "A")).toContain("判断記録");
     expect(buildWebhookReply("passed", "7203.T", "B")).toContain("見送り");
     expect(buildWebhookReply("deferred", "7203.T", "C")).toContain("保留");
   });
@@ -287,6 +288,13 @@ describe("external analysis pack", () => {
           upsideConservativePct: 1.6, upsideBasePct: 6.5, upsideBullPct: 12.9,
           downsidePct: -4.8, riskRewardBase: 1.35,
           expectedHoldingPeriod: "2W", calculationMethod: "atr_v1",
+          scenarioQuality: {
+            atrSource: "actual",
+            swingHighSource: "actual",
+            swingLowSource: "actual",
+            confidence: 95,
+            warnings: [],
+          },
         },
       },
     } as ScoredSymbol;
@@ -295,6 +303,8 @@ describe("external analysis pack", () => {
     expect(pack).toContain("Signal One-shot External Analysis Pack");
     expect(pack).toContain("Anonymized");
     expect(pack).toContain("Transportation Equipment");
+    expect(pack).toContain("Scenario Quality");
+    expect(pack).toContain("無効化ライン");
     expect(pack).not.toContain("Toyota");
     expect(pack).not.toContain("7203.T");
   });

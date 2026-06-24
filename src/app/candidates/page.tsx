@@ -5,7 +5,7 @@ import type { ReactNode } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { AnimatePresence, motion } from "framer-motion";
-import { Activity, Building2, ChartColumnIncreasing, Gauge, RefreshCw, RotateCcw, Target } from "lucide-react";
+import { Activity, AlertTriangle, Building2, ChartColumnIncreasing, CheckCircle2, Gauge, RefreshCw, RotateCcw, Target } from "lucide-react";
 import { SignalCard } from "@/components/signal-card";
 import { FundamentalTrendCharts, ScoreRiskScatter, SectorStrengthChart, type FundamentalPoint } from "@/components/candidate-visuals";
 import { Button } from "@/components/ui/button";
@@ -16,8 +16,12 @@ interface SignalData {
   symbol: string; name: string | null; action: string; tier: string;
   sector: string; industry: string | null; themes: string[];
   scores: { opportunity: number; entryTiming: number; risk: number; conviction: number; final: number };
-  scenario: { entryPrice: number; stopPrice: number; targetBase: number; riskRewardBase: number } | null;
+  scenario: { entryPrice: number; stopPrice: number; targetBase: number; riskRewardBase: number; scenarioQuality?: { confidence: number; warnings: string[] } } | null;
   reason: string;
+  decisionReasons: Array<{ code: string; message: string; severity: "blocker" | "warning" | "info" }>;
+  gateDetails: Array<{ key: string; label: string; passed: boolean; severity: "blocker" | "warning" | "info"; reason: string }>;
+  dataConfidence: number;
+  eventBlockerActive: boolean;
   analysisSummary: string;
   snapshot: {
     close: number; rsi14: number | null; volumeRatio20d: number | null; return5d: number | null; return20d: number | null;
@@ -109,6 +113,7 @@ export default function CandidatesPage() {
           <h1 className="page-title">候補銘柄</h1>
           <p className="page-subtitle">日経平均相当の市場レイヤーから、業界・関連テーマ・個別銘柄へドリルダウン</p>
           <p className="meaning-note">現在はモックの大型株サンプル{signals.length || 30}銘柄です。全上場銘柄ではなく、API/DB連携後に対象ユニバースを拡張できます。</p>
+          <p className="meaning-note">Signalは投資助言や売買指示ではなく、候補銘柄のレビュー観点を整理するための個人利用ツールです。</p>
         </div>
         <Button onClick={fetchSignals} variant="outline" size="sm">
           <RefreshCw size={14} />
@@ -162,7 +167,7 @@ export default function CandidatesPage() {
             />
           </div>
           <div className="empty-state-title">シグナルはまだありません</div>
-          <div className="empty-state-copy">日次スキャンを実行すると、投資判断シグナルがここに表示されます。</div>
+          <div className="empty-state-copy">日次スキャンを実行すると、確認候補とレビュー観点がここに表示されます。</div>
         </div>
       )}
 
@@ -258,7 +263,7 @@ export default function CandidatesPage() {
                 <div>
                   <div className="section-kicker">Score Map</div>
                   <h2 style={{ fontSize: 16, fontWeight: 600 }}>最終スコア × リスク制御</h2>
-                  <MeaningNote>右に行くほど買い候補として強く、上に行くほどリスク制御が良好です。点を押すと銘柄詳細に移ります。</MeaningNote>
+                  <MeaningNote>右に行くほど候補度が高く、上に行くほどリスク制御が良好です。点を押すと銘柄詳細に移ります。</MeaningNote>
                 </div>
                 <span className="badge badge-outline">{filteredSignals.length}銘柄</span>
               </div>
@@ -384,6 +389,7 @@ export default function CandidatesPage() {
                     </div>
                     <p style={{ marginTop: 12, fontSize: 13, lineHeight: 1.7, color: scoreTone(selectedSignal.scores.final).color, fontWeight: 600 }}>{finalScoreInsight(selectedSignal.scores.final)}</p>
                     <p style={{ marginTop: 10, fontSize: 13, lineHeight: 1.7, color: "var(--color-espresso-ink)" }}>{selectedSignal.analysisSummary}</p>
+                    <GateSummary signal={selectedSignal} />
                     <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 12 }}>
                       <Button asChild size="sm">
                         <Link href={`/companies/${encodeURIComponent(selectedSignal.symbol)}`}>
@@ -508,4 +514,58 @@ function FactCell({ label, value }: { label: string; value: string }) {
 function formatPct(value: number | null) {
   if (value == null) return "--";
   return `${value >= 0 ? "+" : ""}${value.toFixed(1)}%`;
+}
+
+function GateSummary({ signal }: { signal: SignalData }) {
+  const focusGates = ["finalEntryScoreGate", "riskGate", "rrGate", "dataConfidenceGate", "eventBlockerGate"];
+  const gates = focusGates
+    .map((key) => signal.gateDetails.find((gate) => gate.key === key))
+    .filter((gate): gate is NonNullable<typeof gate> => Boolean(gate));
+  const cautionReasons = signal.decisionReasons.filter((reason) => reason.severity !== "info").slice(0, 3);
+  const scenarioWarnings = signal.scenario?.scenarioQuality?.warnings ?? [];
+
+  return (
+    <div style={{ marginTop: 12, display: "grid", gap: 10 }}>
+      <div className="review-step">
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
+          <div>
+            <div className="stat-label">Gate Summary</div>
+            <div style={{ fontSize: 13, fontWeight: 600, marginTop: 2 }}>判断前に見る確認ゲート</div>
+          </div>
+          <span className="badge badge-outline">信頼度 {signal.dataConfidence}</span>
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(116px, 1fr))", gap: 8, marginTop: 10 }}>
+          {gates.map((gate) => (
+            <div key={gate.key} style={{ border: "1px solid var(--color-border-sand)", borderRadius: 8, padding: 8, background: gate.passed ? "#fbfdfb" : "#fff8f1" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4 }}>
+                {gate.passed ? <CheckCircle2 size={14} color="var(--color-signal-green)" /> : <AlertTriangle size={14} color="var(--color-ember-orange)" />}
+                <span style={{ fontSize: 12, fontWeight: 700 }}>{gate.label}</span>
+              </div>
+              <div style={{ fontSize: 11, color: "var(--color-muted-clay)", lineHeight: 1.4 }}>{gate.reason}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {(cautionReasons.length > 0 || scenarioWarnings.length > 0) && (
+        <div className="review-step">
+          <div className="stat-label">Caution Drivers</div>
+          <div style={{ display: "grid", gap: 6, marginTop: 8 }}>
+            {cautionReasons.map((reason) => (
+              <div key={reason.code} style={{ display: "flex", alignItems: "flex-start", gap: 7, fontSize: 12, color: "var(--color-espresso-ink)", lineHeight: 1.5 }}>
+                <AlertTriangle size={14} color={reason.severity === "blocker" ? "var(--color-ember-orange)" : "var(--color-brass-gold)"} style={{ marginTop: 2, flex: "0 0 auto" }} />
+                <span>{reason.message}</span>
+              </div>
+            ))}
+            {scenarioWarnings.slice(0, 2).map((warning) => (
+              <div key={warning} style={{ display: "flex", alignItems: "flex-start", gap: 7, fontSize: 12, color: "var(--color-espresso-ink)", lineHeight: 1.5 }}>
+                <AlertTriangle size={14} color="var(--color-brass-gold)" style={{ marginTop: 2, flex: "0 0 auto" }} />
+                <span>シナリオ品質: {warning}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
 }

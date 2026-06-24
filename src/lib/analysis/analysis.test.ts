@@ -80,7 +80,13 @@ describe("InvestmentAnalysisEngine", () => {
   it("builds LLM snapshots from logic output without provider coupling", () => {
     const logic = new RuleBasedAnalysisEngine().analyze(subject());
     const llmInput = buildLlmInputSnapshot(subject(), logic);
+    expect(llmInput.schemaVersion).toBe("analysis-input-v1");
+    expect(llmInput.scoreEngineVersion).toBeTruthy();
+    expect(llmInput.scoringConfigVersion).toBeTruthy();
     expect(llmInput.symbol).toBe("7203.T");
+    expect(llmInput.inputSnapshot?.featureAvailability.technical).toBe(true);
+    expect(llmInput.inputSnapshot?.featureAvailability.fundamentals).toBe(false);
+    expect(llmInput.inputSnapshot?.dataSources.length).toBeGreaterThan(0);
     expect(llmInput.layers.symbol?.scopeKey).toBe("7203.T");
     expect(llmInput.scoreContributions?.finalEntry.length).toBeGreaterThan(0);
     expect(llmInput.gateDetails?.length).toBeGreaterThan(0);
@@ -102,5 +108,86 @@ describe("InvestmentAnalysisEngine", () => {
     expect(guarded.entryTiming).toBeLessThanOrEqual(0);
     expect(guarded.risk).toBeGreaterThanOrEqual(0);
     expect(guarded.reason).toContain("Guarded");
+  });
+
+  it("bounds LLM adjustments asymmetrically", () => {
+    const logic = new RuleBasedAnalysisEngine().analyze(subject());
+    const guarded = sanitizeLlmScoreAdjustment(subject(), {
+      ...logic,
+      classification: { ...logic.classification, action: "watch", gates: { ...logic.classification.gates, rrGate: true } },
+    }, {
+      opportunity: 8,
+      entryTiming: -12,
+      risk: -8,
+      conviction: 9,
+      reason: "large swing",
+    });
+    expect(guarded.opportunity).toBe(5);
+    expect(guarded.entryTiming).toBe(-10);
+    expect(guarded.risk).toBe(-5);
+    expect(guarded.conviction).toBe(5);
+    expect(guarded.reason).toContain("bounded asymmetrically");
+  });
+
+  it("blocks optimistic adjustments when critic requires downgrade", () => {
+    const logic = new RuleBasedAnalysisEngine().analyze(subject());
+    const guarded = sanitizeLlmScoreAdjustment(subject(), {
+      ...logic,
+      classification: { ...logic.classification, action: "watch", gates: { ...logic.classification.gates, rrGate: true } },
+    }, {
+      opportunity: 5,
+      entryTiming: 5,
+      risk: -5,
+      conviction: 5,
+      reason: "critic disagrees",
+    }, {
+      critic: { critic_pass: false, major_concerns: ["too optimistic"], required_downgrade: true, downgrade_to: "watch", block_positive_adjustment: true, reasons: ["risk ignored"], evidence_refs: [{ type: "gate", key: "riskGate" }], reason: "risk ignored" },
+      llmConfidence: 80,
+    });
+    expect(guarded.opportunity).toBe(0);
+    expect(guarded.entryTiming).toBe(0);
+    expect(guarded.risk).toBe(0);
+    expect(guarded.conviction).toBe(0);
+    expect(guarded.reason).toContain("critic downgrade");
+  });
+
+  it("blocks optimistic adjustments when critic only blocks positive adjustment", () => {
+    const logic = new RuleBasedAnalysisEngine().analyze(subject());
+    const guarded = sanitizeLlmScoreAdjustment(subject(), {
+      ...logic,
+      classification: { ...logic.classification, action: "watch", gates: { ...logic.classification.gates, rrGate: true } },
+    }, {
+      opportunity: 5,
+      entryTiming: 5,
+      risk: -5,
+      conviction: 5,
+      reason: "critic cautions",
+    }, {
+      critic: { critic_pass: true, major_concerns: [], required_downgrade: false, downgrade_to: null, block_positive_adjustment: true, reasons: ["weak evidence"], evidence_refs: [{ type: "contribution", component: "conviction", feature: "dataConfidence" }], reason: "weak evidence" },
+      llmConfidence: 80,
+    });
+    expect(guarded.opportunity).toBe(0);
+    expect(guarded.entryTiming).toBe(0);
+    expect(guarded.risk).toBe(0);
+    expect(guarded.conviction).toBe(0);
+    expect(guarded.reason).toContain("critic blocks positive");
+  });
+
+  it("ignores numeric adjustments when LLM confidence is low", () => {
+    const logic = new RuleBasedAnalysisEngine().analyze(subject());
+    const guarded = sanitizeLlmScoreAdjustment(subject(), logic, {
+      opportunity: 4,
+      entryTiming: -4,
+      risk: 4,
+      conviction: -4,
+      reason: "uncertain read",
+    }, {
+      llmConfidence: 35,
+    });
+    expect(guarded.opportunity).toBe(0);
+    expect(guarded.entryTiming).toBe(0);
+    expect(guarded.risk).toBe(0);
+    expect(guarded.conviction).toBe(0);
+    expect(guarded.reason).toContain("low LLM confidence");
   });
 });

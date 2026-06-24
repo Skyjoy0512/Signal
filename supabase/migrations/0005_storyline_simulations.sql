@@ -44,6 +44,9 @@ create unique index if not exists storyline_scenarios_set_kind_idx
 alter table public.storyline_sets enable row level security;
 alter table public.storyline_scenarios enable row level security;
 
+grant select, insert, update, delete on table public.storyline_sets to service_role;
+grant select, insert, update, delete on table public.storyline_scenarios to service_role;
+
 do $$
 begin
   if not exists (
@@ -55,8 +58,9 @@ begin
     create policy storyline_sets_service_role_all
       on public.storyline_sets
       for all
-      using (auth.role() = 'service_role')
-      with check (auth.role() = 'service_role');
+      to service_role
+      using (true)
+      with check (true);
   end if;
 
   if not exists (
@@ -68,7 +72,8 @@ begin
     create policy storyline_scenarios_service_role_all
       on public.storyline_scenarios
       for all
-      using (auth.role() = 'service_role')
-      with check (auth.role() = 'service_role');
+      to service_role
+      using (true)
+      with check (true);
   end if;
 end $$;
