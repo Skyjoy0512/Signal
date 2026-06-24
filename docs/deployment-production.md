@@ -14,12 +14,13 @@ This runbook covers hosted Supabase plus Vercel-style Next.js hosting.
 - `npm run deploy:smoke` is available for hosted app smoke tests.
 - Vercel project `signal` is created and linked locally.
 - Production deployment is live at `https://signal-kappa-ten.vercel.app`.
-- Production pages and internal APIs require the `APP_ADMIN_TOKEN` login cookie.
+- Production pages and internal APIs require either the `APP_ADMIN_TOKEN` login cookie or an allowed Supabase Google Auth session.
 - Hosted Supabase project `signal` is created and linked locally.
 - Hosted Supabase project ref: `qyifzwzguwrpkrvyvbzb`.
 - Hosted Supabase migrations are applied through `20260624225320_add_advisor_foreign_key_indexes.sql`.
 - Supabase URL/API keys are stored in the Vercel project for Production, Preview, and Development.
 - Required non-Supabase Vercel environment variables are stored in the Vercel project for Production, Preview, and Development.
+- Google Auth requires `SIGNAL_AUTH_ALLOWED_EMAILS` in production; without it, Google sessions fail closed.
 - A local ignored `.env.local` contains the generated Vercel admin/seed/encryption values for operator smoke tests.
 - Vercel SSO deployment protection was disabled for public smoke testing.
 - Production API `GET /api/fundamentals` returns `source: "supabase-fundamentals"` after seed/import.
@@ -131,15 +132,16 @@ Required:
 - `NEXT_PUBLIC_APP_URL`
 - `SUPABASE_URL`
 - `SUPABASE_SERVICE_ROLE_KEY`
-- `APP_ADMIN_TOKEN`
-- `APP_SETTINGS_ENCRYPTION_KEY`
-- `FUNDAMENTALS_SEED_TOKEN`
-
-Recommended:
-
 - `SUPABASE_ANON_KEY`
 - `NEXT_PUBLIC_SUPABASE_URL`
 - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+- `APP_ADMIN_TOKEN`
+- `APP_SETTINGS_ENCRYPTION_KEY`
+- `FUNDAMENTALS_SEED_TOKEN`
+- `SIGNAL_AUTH_ALLOWED_EMAILS`
+
+Recommended:
+
 - `DEEPSEEK_API_KEY`
 - `DEEPSEEK_BASE_URL`
 - `LLM_PROVIDER`
@@ -152,6 +154,39 @@ Recommended:
 - `DAILY_LLM_COST_LIMIT_USD`
 
 Do not set `APP_SETTINGS_ENCRYPTION_KEY` to the same value as `SUPABASE_SERVICE_ROLE_KEY`.
+
+## Google Auth Setup
+
+The app implements Supabase Google OAuth as the primary sign-in path and keeps the existing admin-token login as a fallback.
+
+1. Set a comma-separated allowlist in Vercel:
+
+```bash
+vercel env add SIGNAL_AUTH_ALLOWED_EMAILS production
+vercel env add SIGNAL_AUTH_ALLOWED_EMAILS preview
+vercel env add SIGNAL_AUTH_ALLOWED_EMAILS development
+```
+
+2. In Supabase Auth settings, enable Google as an OAuth provider and add the Google client ID and secret.
+3. In Google Cloud Console, set the OAuth redirect URI to:
+
+```text
+https://qyifzwzguwrpkrvyvbzb.supabase.co/auth/v1/callback
+```
+
+4. In Supabase URL configuration, keep the production site URL as:
+
+```text
+https://signal-kappa-ten.vercel.app
+```
+
+5. Add this additional redirect URL if Supabase blocks the app callback:
+
+```text
+https://signal-kappa-ten.vercel.app/api/auth/callback
+```
+
+6. Redeploy Vercel after changing environment variables.
 
 ## Predeploy Checks
 
@@ -204,10 +239,11 @@ The response should include `source: "supabase-fundamentals"`.
 
 Manual:
 
-1. Open `/login` and sign in with `APP_ADMIN_TOKEN`.
+1. Open `/login` and sign in with an allowed Google account.
 2. Open `/dashboard`, `/candidates`, `/review`, `/compare`, and `/settings`.
 3. Confirm `/api/fundamentals` returns `401` without a login cookie.
 4. Confirm `/api/fundamentals` returns `source: "supabase-fundamentals"` after login.
 5. Confirm protected APIs return `401` without tokens.
 6. Confirm `/settings` works after login.
 7. Confirm no service role key is exposed to the browser.
+8. Confirm admin-token login still works as an emergency fallback.

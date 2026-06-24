@@ -105,7 +105,7 @@ async function verifySettingsAdminTokenFlow(page) {
 async function login(page, token) {
   await page.goto(`${baseUrl}/login`, { waitUntil: "networkidle" });
   await page.locator('input[name="token"]').fill(token);
-  await page.locator('button[type="submit"]').click();
+  await page.getByRole("button", { name: "続行" }).click();
   await page.waitForURL((url) => url.pathname !== "/login", { timeout: 10_000 }).catch(() => undefined);
 }
 
