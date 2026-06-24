@@ -8,14 +8,15 @@ if (!appUrl) {
 }
 
 const baseUrl = appUrl.replace(/\/$/, "");
+const authCookie = adminToken ? await loginCookie() : "";
 
-await check("home loads", async () => {
+await check("public request reaches login", async () => {
   const response = await fetch(`${baseUrl}/`);
-  return response.ok;
+  return response.ok && (await response.text()).includes("ログイン");
 });
 
 await check("fundamentals API loads", async () => {
-  const response = await fetch(`${baseUrl}/api/fundamentals`, { cache: "no-store" });
+  const response = await fetch(`${baseUrl}/api/fundamentals`, { cache: "no-store", headers: authHeaders() });
   if (!response.ok) return false;
   const body = await response.json();
   return Boolean(body.source && Array.isArray(body.companies));
@@ -30,6 +31,11 @@ if (adminToken) {
   await check("settings API accepts admin token", async () => {
     const response = await fetch(`${baseUrl}/api/settings/llm`, { headers: { "x-signal-admin-token": adminToken } });
     return response.ok;
+  });
+
+  await check("home loads after login", async () => {
+    const response = await fetch(`${baseUrl}/`, { headers: authHeaders() });
+    return response.ok && !(await response.text()).includes("ログイン");
   });
 }
 
@@ -46,4 +52,19 @@ async function check(name, fn) {
   } catch (error) {
     failures.push(`${name}: ${error instanceof Error ? error.message : "failed"}`);
   }
+}
+
+async function loginCookie() {
+  const form = new URLSearchParams({ token: adminToken, next: "/" });
+  const response = await fetch(`${baseUrl}/api/auth/login`, {
+    method: "POST",
+    body: form,
+    redirect: "manual",
+  });
+  const cookie = response.headers.get("set-cookie") ?? "";
+  return cookie.split(";")[0];
+}
+
+function authHeaders() {
+  return authCookie ? { cookie: authCookie } : {};
 }

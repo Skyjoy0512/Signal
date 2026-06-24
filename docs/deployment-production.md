@@ -14,6 +14,7 @@ This runbook covers hosted Supabase plus Vercel-style Next.js hosting.
 - `npm run deploy:smoke` is available for hosted app smoke tests.
 - Vercel project `signal` is created and linked locally.
 - Production deployment is live at `https://signal-kappa-ten.vercel.app`.
+- Production pages and internal APIs require the `APP_ADMIN_TOKEN` login cookie.
 - Hosted Supabase project `signal` is created and linked locally.
 - Hosted Supabase project ref: `qyifzwzguwrpkrvyvbzb`.
 - Hosted Supabase migrations are applied through `20260624225320_add_advisor_foreign_key_indexes.sql`.
@@ -187,10 +188,10 @@ Automated:
 APP_UNDER_TEST_URL=https://<production-host> APP_UNDER_TEST_ADMIN_TOKEN=<admin-token> npm run deploy:smoke
 ```
 
-Current production smoke without admin token:
+Current production smoke:
 
 ```bash
-APP_UNDER_TEST_URL=https://signal-kappa-ten.vercel.app npm run deploy:smoke
+APP_UNDER_TEST_URL=https://signal-kappa-ten.vercel.app APP_UNDER_TEST_ADMIN_TOKEN=<admin-token> npm run deploy:smoke
 ```
 
 Current hosted data check:
@@ -203,8 +204,10 @@ The response should include `source: "supabase-fundamentals"`.
 
 Manual:
 
-1. Open `/dashboard`, `/candidates`, `/review`, `/compare`, and `/settings`.
-2. Confirm `/api/fundamentals` returns `source: "supabase-fundamentals"` after seed/import.
-3. Confirm protected APIs return `401` without tokens.
-4. Confirm `/settings` works after entering `APP_ADMIN_TOKEN`.
-5. Confirm no service role key is exposed to the browser.
+1. Open `/login` and sign in with `APP_ADMIN_TOKEN`.
+2. Open `/dashboard`, `/candidates`, `/review`, `/compare`, and `/settings`.
+3. Confirm `/api/fundamentals` returns `401` without a login cookie.
+4. Confirm `/api/fundamentals` returns `source: "supabase-fundamentals"` after login.
+5. Confirm protected APIs return `401` without tokens.
+6. Confirm `/settings` works after login.
+7. Confirm no service role key is exposed to the browser.

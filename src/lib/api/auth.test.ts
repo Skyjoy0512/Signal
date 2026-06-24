@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { requireAdminRequest } from "./auth";
+import { adminSessionValue } from "./session";
 
 afterEach(() => {
   vi.unstubAllEnvs();
@@ -22,6 +23,12 @@ describe("requireAdminRequest", () => {
     vi.stubEnv("APP_ADMIN_TOKEN", "secret");
     expect(requireAdminRequest(new Request("http://localhost/api", { headers: { authorization: "Bearer secret" } }))).toBeNull();
     expect(requireAdminRequest(new Request("http://localhost/api", { headers: { "x-signal-admin-token": "secret" } }))).toBeNull();
+  });
+
+  it("accepts the http-only login cookie session value", () => {
+    vi.stubEnv("APP_ADMIN_TOKEN", "secret");
+    const cookie = `signal-auth=${adminSessionValue("secret")}`;
+    expect(requireAdminRequest(new Request("http://localhost/api", { headers: { cookie } }))).toBeNull();
   });
 
   it("rejects wrong tokens with matching length", () => {

@@ -19,7 +19,7 @@ try {
     releaseLock = await acquireLock();
     server = spawn("npm", ["run", "dev", "--", "--port", String(port)], {
       cwd: process.cwd(),
-      env: process.env,
+      env: process.env.APP_UNDER_TEST_ADMIN_TOKEN ? process.env : { ...process.env, APP_ADMIN_TOKEN: "" },
       stdio: ["ignore", "pipe", "pipe"],
     });
     collectServerLogs(server, serverLogs);
@@ -32,6 +32,7 @@ try {
     await page.addInitScript((token) => {
       localStorage.setItem("signal-admin-token", token);
     }, process.env.APP_UNDER_TEST_ADMIN_TOKEN);
+    await login(page, process.env.APP_UNDER_TEST_ADMIN_TOKEN);
   }
 
   page.on("console", (message) => {
@@ -87,8 +88,8 @@ async function verifySettingsAdminTokenFlow(page) {
   const token = process.env.APP_UNDER_TEST_ADMIN_TOKEN;
   const cleanPage = await page.context().browser().newPage({ viewport: { width: 1366, height: 900 } });
   try {
+    await login(cleanPage, token);
     await cleanPage.goto(`${baseUrl}/settings`, { waitUntil: "networkidle" });
-    await expectText(cleanPage, "Admin token is required", "settings shows unauthorized status without admin token");
     await cleanPage.getByLabel("Admin token").fill(token);
     await cleanPage.getByRole("button", { name: /再読み込み/ }).click();
     await expectText(cleanPage, "環境変数を使用中", "settings reload succeeds after entering admin token");
@@ -99,6 +100,13 @@ async function verifySettingsAdminTokenFlow(page) {
   } finally {
     await cleanPage.close();
   }
+}
+
+async function login(page, token) {
+  await page.goto(`${baseUrl}/login`, { waitUntil: "networkidle" });
+  await page.locator('input[name="token"]').fill(token);
+  await page.locator('button[type="submit"]').click();
+  await page.waitForURL((url) => url.pathname !== "/login", { timeout: 10_000 }).catch(() => undefined);
 }
 
 async function expectText(page, text, label) {
