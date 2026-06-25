@@ -19,6 +19,7 @@
     "db:reset": "SUPABASE_TELEMETRY_DISABLED=1 supabase db reset",
     "deploy:bootstrap": "node scripts/bootstrap-hosting.mjs",
     "deploy:check-env": "node scripts/check-production-env.mjs",
+    "deploy:configure-google-auth": "node scripts/configure-supabase-google-auth.mjs",
     "deploy:supabase-status": "node scripts/check-supabase-hosted.mjs",
     "deploy:sync-supabase-env": "node scripts/sync-vercel-supabase-env.mjs",
     "deploy:smoke": "node scripts/smoke-production.mjs",

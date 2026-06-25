@@ -6,6 +6,14 @@ export async function POST(request: Request) {
   const form = await request.formData();
   const next = isSafeRedirect(String(form.get("next") ?? "/"));
   const origin = new URL(request.url).origin;
+
+  if (!googleAuthEnabled()) {
+    const url = new URL("/login", origin);
+    url.searchParams.set("next", next);
+    url.searchParams.set("error", "google_unavailable");
+    return NextResponse.redirect(url);
+  }
+
   const supabase = await createAuthClient();
   const { data, error } = await supabase.auth.signInWithOAuth({
     provider: "google",
@@ -26,4 +34,8 @@ export async function POST(request: Request) {
   }
 
   return NextResponse.redirect(data.url);
+}
+
+function googleAuthEnabled() {
+  return process.env.SIGNAL_GOOGLE_AUTH_ENABLED === "true";
 }

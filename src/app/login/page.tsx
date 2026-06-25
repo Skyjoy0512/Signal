@@ -4,6 +4,7 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
   const params = await searchParams;
   const next = safeNext(params.next);
   const message = errorMessage(params.error);
+  const googleEnabled = process.env.SIGNAL_GOOGLE_AUTH_ENABLED === "true";
   return (
     <main className="login-shell">
       <section className="login-panel">
@@ -16,11 +17,15 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
           <p className="page-subtitle">Signalは個人用のレビュー支援ツールです。</p>
         </div>
         {message ? <div className="login-error">{message}</div> : null}
-        <form action="/api/auth/google" method="post" className="login-form">
-          <input type="hidden" name="next" value={next} />
-          <button className="btn btn-primary" type="submit">Googleでログイン</button>
-        </form>
-        <div className="divider" />
+        {googleEnabled ? (
+          <>
+            <form action="/api/auth/google" method="post" className="login-form">
+              <input type="hidden" name="next" value={next} />
+              <button className="btn btn-primary" type="submit">Googleでログイン</button>
+            </form>
+            <div className="divider" />
+          </>
+        ) : null}
         <form action="/api/auth/login" method="post" className="login-form">
           <input type="hidden" name="next" value={next} />
           <label style={{ display: "grid", gap: 6 }}>
@@ -41,6 +46,7 @@ function safeNext(value?: string) {
 
 function errorMessage(value?: string) {
   if (value === "forbidden") return "このGoogleアカウントは許可されていません。";
+  if (value === "google_unavailable") return "Googleログインは準備中です。";
   if (value === "oauth") return "Googleログインに失敗しました。";
   if (value) return "トークンが一致しません。";
   return "";
