@@ -8,6 +8,6 @@ export function adminSessionValue(token = process.env.APP_ADMIN_TOKEN ?? ""): st
 }
 
 export function isSafeRedirect(value: string | null): string {
-  if (!value || !value.startsWith("/") || value.startsWith("//")) return "/";
+  if (!value || value === "/" || !value.startsWith("/") || value.startsWith("//")) return "/dashboard";
   return value;
 }

@@ -1,12 +1,8 @@
 "use client";
 
-import type { CSSProperties } from "react";
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Brain, Database, Filter, RotateCcw, Save } from "lucide-react";
 import type { EnrichedCompany, IndustrySummary } from "@/lib/fundamentals/provider";
-import { Button } from "@/components/ui/button";
-import { StatusPill } from "@/components/visual-primitives";
 
 export default function ScreeningPage() {
   const [rows, setRows] = useState<EnrichedCompany[]>([]);
@@ -17,181 +13,135 @@ export default function ScreeningPage() {
   const [minMargin, setMinMargin] = useState(0);
   const [minRoe, setMinRoe] = useState(0);
   const [maxPer, setMaxPer] = useState(50);
+
   useEffect(() => {
     let cancelled = false;
     async function load() {
-      const response = await fetch("/api/fundamentals");
-      const data = await response.json() as { companies?: EnrichedCompany[]; industries?: IndustrySummary[]; sourceLabel?: string };
+      const res = await fetch("/api/fundamentals");
+      const data = await res.json() as { companies?: EnrichedCompany[]; industries?: IndustrySummary[]; sourceLabel?: string };
       if (cancelled) return;
       setRows(data.companies ?? []);
       setIndustries(data.industries ?? []);
       setSourceLabel(data.sourceLabel ?? "不明");
     }
-    load().catch(() => {
-      if (!cancelled) setSourceLabel("読み込み失敗");
-    });
+    load().catch(() => { if (!cancelled) setSourceLabel("読み込み失敗"); });
     return () => { cancelled = true; };
   }, []);
-  const filtered = rows.filter((company) => {
-    if (industry !== "ALL" && company.industryCode !== industry) return false;
-    if (company.latest.revenue < minRevenue) return false;
-    if (company.latest.operatingMargin < minMargin) return false;
-    if (company.latest.roe < minRoe) return false;
-    if (company.metrics.per > maxPer) return false;
+
+  const filtered = rows.filter((c) => {
+    if (industry !== "ALL" && c.industryCode !== industry) return false;
+    if (c.latest.revenue < minRevenue) return false;
+    if (c.latest.operatingMargin < minMargin) return false;
+    if (c.latest.roe < minRoe) return false;
+    if (c.metrics.per > maxPer) return false;
     return true;
   });
+
   const loading = sourceLabel === "読み込み中";
   const activeFilters = [
-    industry !== "ALL" ? `業種: ${industries.find((row) => row.code === industry)?.name ?? industry}` : null,
+    industry !== "ALL" ? `業種: ${industries.find((r) => r.code === industry)?.name ?? industry}` : null,
     minRevenue > 0 ? `売上 >= ${minRevenue.toLocaleString()}` : null,
     minMargin > 0 ? `営業利益率 >= ${minMargin}%` : null,
     minRoe > 0 ? `ROE >= ${minRoe}%` : null,
     maxPer < 50 ? `PER <= ${maxPer}倍` : null,
   ].filter(Boolean) as string[];
-  const resetFilters = () => {
-    setIndustry("ALL");
-    setMinRevenue(0);
-    setMinMargin(0);
-    setMinRoe(0);
-    setMaxPer(50);
-  };
+
+  const reset = () => { setIndustry("ALL"); setMinRevenue(0); setMinMargin(0); setMinRoe(0); setMaxPer(50); };
 
   return (
-    <div className="page-container">
-      <div className="page-header">
-        <h1 className="page-title">条件検索</h1>
-        <p className="page-subtitle">業種、売上、営業利益率、ROE、PERで企業を絞り込みます。</p>
-        <p className="meaning-note">データソース: {sourceLabel}</p>
-      </div>
-
-      <div className="image-context-grid">
-        <ContextCard
-          title="数字で絞る"
-          copy="売上、利益率、ROE、PERを同じ尺度でフィルタします"
-          image="https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=900&q=80&fit=crop"
-        />
-        <ContextCard
-          title="業界で探す"
-          copy="業種別の地合いや同業比較へ自然につなげます"
-          image="https://images.unsplash.com/photo-1454165804606-c3d57bc86b40?w=900&q=80&fit=crop"
-        />
-        <ContextCard
-          title="判断順を作る"
-          copy="ファクトで絞り、インテリジェンスで深掘り順を決めます"
-          image="https://images.unsplash.com/photo-1642790106117-e829e14a795f?w=900&q=80&fit=crop"
-        />
-      </div>
-
-      {loading && (
-        <div className="card state-panel" style={{ marginBottom: 14 }}>
-          <div className="state-panel-head">
-            <div>
-              <div className="stat-label">Loading</div>
-              <div className="state-panel-title">条件検索データを読み込み中</div>
-              <p className="state-panel-copy">企業マスターと業界一覧を取得しています。</p>
-            </div>
-            <span className="badge badge-outline">読み込み中</span>
-          </div>
-          <div className="skeleton-grid">
-            {[0, 1, 2].map((item) => (
-              <div key={item} className="skeleton-card">
-                <div className="skeleton-line short" />
-                <div className="skeleton-line long" />
-                <div className="skeleton-line medium" />
-              </div>
-            ))}
-          </div>
+    <>
+      <header className="app-header">
+        <div className="app-header-left">
+          <span style={{ fontWeight: 600, fontSize: 16 }}>条件検索</span>
         </div>
+      </header>
+
+      <div className="page-header">
+        <h1>条件検索</h1>
+        <p>業種、売上、営業利益率、ROE、PERで企業を絞り込みます / {sourceLabel}</p>
+      </div>
+
+      {loading ? (
+        <div className="card" style={{ textAlign: "center", padding: "var(--space-10)" }}>
+          <h3 style={{ fontSize: 16, fontWeight: 600, marginBottom: "var(--space-2)" }}>条件検索データを読み込み中</h3>
+          <p style={{ color: "var(--muted)", fontSize: 14 }}>企業マスターと業界一覧を取得しています。</p>
+        </div>
+      ) : (
+        <>
+          <div className="stats-grid mb-6">
+            <div className="card card-sm">
+              <div className="stat-label">ファクト条件</div>
+              <p style={{ margin: 0, fontSize: 14, color: "var(--muted)" }}>観測データで絞る</p>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "var(--space-3)", marginTop: "var(--space-4)" }}>
+                <div className="form-group">
+                  <label className="form-label">業種</label>
+                  <select className="form-input w-full" value={industry} onChange={(e) => setIndustry(e.target.value)}>
+                    <option value="ALL">すべて</option>
+                    {industries.map((r) => <option key={r.code} value={r.code}>{r.name}</option>)}
+                  </select>
+                </div>
+                <div className="form-group">
+                  <label className="form-label">売上下限</label>
+                  <input type="number" className="form-input w-full" value={minRevenue || ""} onChange={(e) => setMinRevenue(Number(e.target.value))} placeholder="0" style={{ fontFamily: "var(--font-mono)" }} />
+                </div>
+                <div className="form-group">
+                  <label className="form-label">営業利益率下限(%)</label>
+                  <input type="number" className="form-input w-full" value={minMargin || ""} onChange={(e) => setMinMargin(Number(e.target.value))} placeholder="0" style={{ fontFamily: "var(--font-mono)" }} />
+                </div>
+              </div>
+            </div>
+            <div className="card card-sm">
+              <div className="stat-label">インテリジェンス条件</div>
+              <p style={{ margin: 0, fontSize: 14, color: "var(--muted)" }}>質と割高度で並べる</p>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "var(--space-3)", marginTop: "var(--space-4)" }}>
+                <div className="form-group">
+                  <label className="form-label">ROE下限(%)</label>
+                  <input type="number" className="form-input w-full" value={minRoe || ""} onChange={(e) => setMinRoe(Number(e.target.value))} placeholder="0" style={{ fontFamily: "var(--font-mono)" }} />
+                </div>
+                <div className="form-group">
+                  <label className="form-label">PER上限(倍)</label>
+                  <input type="number" className="form-input w-full" value={maxPer || ""} onChange={(e) => setMaxPer(Number(e.target.value))} placeholder="50" style={{ fontFamily: "var(--font-mono)" }} />
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div style={{ display: "flex", gap: "var(--space-3)", alignItems: "center", marginBottom: "var(--space-6)" }}>
+            <button className="btn btn-sm btn-ghost" onClick={reset}>初期化</button>
+            <span style={{ fontSize: 13, color: "var(--muted)" }}>
+              {activeFilters.length ? activeFilters.join(" / ") : "条件なし"} / <strong>{filtered.length}件</strong>
+            </span>
+          </div>
+        </>
       )}
 
-      {!loading && <div className="filter-shell">
-        <section className="card lane-card">
-          <div className="lane-header">
-            <div>
-              <div className="lane-label"><Database size={14} />ファクト条件</div>
-              <h2 className="lane-title">観測データで絞る</h2>
-            </div>
-            <span className="badge badge-outline">{filtered.length}件</span>
-          </div>
-          <div className="filter-grid">
-            <label><div className="stat-label">業種</div><select value={industry} onChange={(e) => setIndustry(e.target.value)} style={inputStyle}><option value="ALL">すべて</option>{industries.map((row) => <option key={row.code} value={row.code}>{row.name}</option>)}</select></label>
-            <NumberFilter label="売上下限" value={minRevenue} onChange={setMinRevenue} />
-            <NumberFilter label="営業利益率下限" value={minMargin} onChange={setMinMargin} />
-          </div>
-          <div style={{ display: "flex", gap: 8, marginTop: 12, flexWrap: "wrap" }}>
-            <Button variant="outline" size="sm"><Save size={14} />条件保存</Button>
-            <Button variant="ghost" size="sm"><Filter size={14} />{filtered.length}件表示</Button>
-            <Button variant="ghost" size="sm" onClick={resetFilters}><RotateCcw size={14} />初期化</Button>
-          </div>
-        </section>
-        <section className="card lane-card">
-          <div className="lane-header">
-            <div>
-              <div className="lane-label"><Brain size={14} />インテリジェンス条件</div>
-              <h2 className="lane-title">質と割高度で並べる</h2>
-            </div>
-          </div>
-          <div className="filter-grid">
-            <NumberFilter label="ROE下限" value={minRoe} onChange={setMinRoe} />
-            <NumberFilter label="PER上限" value={maxPer} onChange={setMaxPer} />
-          </div>
-          <p className="meaning-note">ROEは質、PERは割高度の目安です。候補の深掘り順を作るための条件として扱います。</p>
-        </section>
-      </div>}
-
-      {!loading && <div className="filter-summary">
-        <div>
-          <div className="stat-label">現在の条件</div>
-          <div className="filter-summary-copy">{activeFilters.length ? activeFilters.join(" / ") : "条件なし"}</div>
+      {!loading && (
+        <div className="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>企業</th><th>業種</th><th>売上</th><th>ROE</th><th>PER</th><th></th>
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.length === 0 ? (
+                <tr><td colSpan={6} style={{ textAlign: "center", color: "var(--muted)", padding: "var(--space-8)" }}>条件に合う企業がありません</td></tr>
+              ) : (
+                filtered.slice(0, 50).map((c) => (
+                  <tr key={c.ticker}>
+                    <td style={{ fontWeight: 500 }}>{c.name}<div style={{ fontSize: 12, color: "var(--muted)", fontFamily: "var(--font-mono)" }}>{c.ticker}</div></td>
+                    <td>{c.industry}</td>
+                    <td style={{ fontFamily: "var(--font-mono)" }}>{c.latest.revenue.toLocaleString()}</td>
+                    <td><span className={`badge ${c.latest.roe >= 10 ? "badge-success" : c.latest.roe >= 5 ? "badge-neutral" : "badge-warn"}`}>{c.latest.roe}%</span></td>
+                    <td style={{ fontFamily: "var(--font-mono)" }}>{c.metrics.per}倍</td>
+                    <td><Link href={`/companies/${encodeURIComponent(c.ticker)}`} className="btn btn-ghost btn-sm">詳細</Link></td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
         </div>
-        <span className="badge badge-outline">{filtered.length}件</span>
-      </div>}
-
-      {!loading && <div className="card data-table">
-        <div className="company-table-head">
-          {["企業", "業種", "売上", "ROE", "PER", "詳細"].map((label) => <div key={label} className="stat-label">{label}</div>)}
-        </div>
-        {filtered.length === 0 && (
-          <div className="empty-state empty-state-compact">
-            <div>
-              <h2>条件に合う企業がありません</h2>
-              <p>売上・ROE・PERの条件を少し広げると候補を確認できます。</p>
-            </div>
-          </div>
-        )}
-        {filtered.map((company) => (
-          <div key={company.ticker} className="company-table-row">
-            <div className="company-cell-main">
-              <div>
-                <div className="company-name">{company.name}</div>
-                <div className="font-mono" style={{ color: "var(--color-muted-clay)", fontSize: 12 }}>{company.ticker}</div>
-              </div>
-            </div>
-            <div className="company-table-cell"><span className="company-table-label">業種</span>{company.industry}</div>
-            <div className="company-table-cell font-mono"><span className="company-table-label">売上</span>{company.latest.revenue.toLocaleString()}</div>
-            <div className="company-table-cell"><span className="company-table-label">ROE</span><StatusPill value={company.latest.roe * 5} label={`${company.latest.roe}%`} /></div>
-            <div className="company-table-cell font-mono"><span className="company-table-label">PER</span>{company.metrics.per}倍</div>
-            <div className="company-table-cell"><span className="company-table-label">詳細</span><Link className="link" href={`/companies/${encodeURIComponent(company.ticker)}`}>詳細</Link></div>
-          </div>
-        ))}
-      </div>}
-    </div>
-  );
-}
-
-const inputStyle = { width: "100%", border: "1px solid var(--color-border-sand)", borderRadius: 8, padding: "8px 10px", background: "#fff" };
-
-function NumberFilter({ label, value, onChange }: { label: string; value: number; onChange: (value: number) => void }) {
-  return <label><div className="stat-label">{label}</div><input type="number" value={value} onChange={(e) => onChange(Number(e.target.value))} style={inputStyle} /></label>;
-}
-
-function ContextCard({ title, copy, image }: { title: string; copy: string; image: string }) {
-  return (
-    <div className="context-card" style={{ "--context-image": `url(${image})` } as CSSProperties}>
-      <div>
-        <div style={{ fontSize: 16, fontWeight: 600 }}>{title}</div>
-        <div style={{ color: "#dfe8dc", fontSize: 12, lineHeight: 1.55, marginTop: 5 }}>{copy}</div>
-      </div>
-    </div>
+      )}
+    </>
   );
 }

@@ -1,33 +1,6 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import Image from "next/image";
-import { RefreshCw, ShieldAlert, ShieldCheck, TrendingDown, TrendingUp, WalletCards } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { ScoreRing } from "@/components/visual-primitives";
-
-function PositionRow({ sym, pnl, pnlPct, status }: { sym: string; pnl: number; pnlPct: number; status: string }) {
-  const isWin = pnl >= 0;
-  return (
-    <div className="position-row">
-      <div>
-        <span className="position-symbol">{sym}</span>
-        <div className="position-meta">
-          <span className="badge badge-outline">{status}</span>
-          <span className="stat-sub">手動 / ペーパー</span>
-        </div>
-      </div>
-      <div className="position-pnl">
-        <span style={{ fontSize: 12, fontWeight: 500, color: isWin ? "var(--color-deep-moss)" : "var(--color-ember-orange)" }}>
-          {isWin ? "+" : ""}¥{pnl.toLocaleString()}
-        </span>
-        <span style={{ fontSize: 11, color: isWin ? "var(--color-deep-moss)" : "var(--color-ember-orange)", marginLeft: 6 }}>
-          {isWin ? "+" : ""}{pnlPct}%
-        </span>
-      </div>
-    </div>
-  );
-}
 
 export default function PositionsPage() {
   const [ks, setKs] = useState<{ allowed: boolean; reason?: string }>({ allowed: true });
@@ -48,7 +21,6 @@ export default function PositionsPage() {
 
   useEffect(() => {
     let ignore = false;
-
     async function loadInitialState() {
       try {
         const res = await fetch("/api/jobs/daily-scan", { method: "POST" });
@@ -56,126 +28,99 @@ export default function PositionsPage() {
         if (ignore) return;
         if (data.success) setShowPositions(true);
         setKs(data.blocked ? { allowed: false, reason: data.reason } : { allowed: true });
-      } catch {
-        // Keep the local demo state when the scan endpoint is unavailable.
-      }
+      } catch { /* keep local demo state */ }
     }
-
     void loadInitialState();
-    return () => {
-      ignore = true;
-    };
+    return () => { ignore = true; };
   }, []);
 
   const totalPnl = positions.reduce((sum, p) => sum + (p.current - p.entry) * p.qty, 0);
   const totalPnlPct = positions.reduce((sum, p) => sum + ((p.current - p.entry) / p.entry) * 100, 0) / positions.length;
 
   return (
-    <div className="page-container">
-      <div className="page-header page-header-actions">
-        <div className="page-header-copy">
-          <h1 className="page-title">ポジション</h1>
-          <p className="page-subtitle">手動・ペーパー取引の管理</p>
+    <>
+      <header className="app-header">
+        <div className="app-header-left">
+          <span style={{ fontWeight: 600, fontSize: 16 }}>ポジション</span>
         </div>
-        <div className="page-action-stack">
-          <Button onClick={fetchState} variant="outline" size="sm"><RefreshCw size={14} />更新</Button>
+        <div className="app-header-right">
+          <button className="btn btn-primary btn-sm" onClick={fetchState}>更新</button>
+        </div>
+      </header>
+
+      <div className="stats-grid mb-8">
+        <div className="stat-card">
+          <div className="stat-label">キルスイッチ</div>
+          <div className="stat-value" style={{ fontSize: 20, color: ks.allowed ? "var(--success)" : "var(--danger)" }}>
+            {ks.allowed ? "正常" : "ブロック中"}
+          </div>
+          <div className="stat-change">連敗・日次損失の安全装置</div>
+        </div>
+        <div className="stat-card">
+          <div className="stat-label">保有中</div>
+          <div className="stat-value">{positions.length}</div>
+          <div className="stat-change">{showPositions ? "データあり" : "更新してください"}</div>
+        </div>
+        <div className="stat-card">
+          <div className="stat-label">評価損益</div>
+          <div className="stat-value" style={{ fontSize: 24, color: totalPnl >= 0 ? "var(--success)" : "var(--danger)" }}>
+            {totalPnl >= 0 ? "+" : ""}¥{totalPnl.toLocaleString()}
+          </div>
+          <div className={`stat-change ${totalPnlPct >= 0 ? "up" : "down"}`}>
+            {totalPnlPct >= 0 ? "+" : ""}{totalPnlPct.toFixed(1)}%
+          </div>
+        </div>
+        <div className="stat-card">
+          <div className="stat-label">勝率</div>
+          <div className="stat-value" style={{ color: "var(--muted)" }}>--</div>
+          <div className="stat-change">取引データ不足</div>
         </div>
       </div>
 
-      <div className="grid-stats" style={{ marginBottom: 14 }}>
-        <div className="card">
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
-            <div>
-              <div className="stat-label">キルスイッチ</div>
-              <div className="stat-value stat-value-sm" style={{ color: ks.allowed ? "var(--color-signal-green)" : "#dc2626" }}>
-                {ks.allowed ? "正常" : "ブロック中"}
-              </div>
-              <div className="stat-sub">連敗・日次損失の安全装置</div>
-            </div>
-            <span className="semantic-icon">{ks.allowed ? <ShieldCheck size={18} /> : <ShieldAlert size={18} />}</span>
-          </div>
-          {ks.reason && <div className="stat-sub" style={{ color: "var(--color-ember-orange)" }}>{ks.reason}</div>}
+      {!showPositions ? (
+        <div className="card" style={{ textAlign: "center", padding: "var(--space-10)" }}>
+          <h3 style={{ fontSize: 16, fontWeight: 600, marginBottom: "var(--space-2)" }}>「更新」を押してデータを読み込んでください</h3>
+          <p style={{ color: "var(--muted)", fontSize: 14 }}>スキャン実行後にポジションデータが表示されます。</p>
         </div>
-        <div className="card">
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
-            <div>
-              <div className="stat-label">保有中</div>
-              <div className="stat-value stat-value-sm">{positions.length}</div>
-              <div className="stat-sub">{showPositions ? "データあり" : "更新してください"}</div>
-            </div>
-            <span className="semantic-icon"><WalletCards size={18} /></span>
-          </div>
-        </div>
-        <div className="card">
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
-            <div>
-              <div className="stat-label">評価損益</div>
-              <div className="stat-value stat-value-sm font-mono" style={{ color: totalPnl >= 0 ? "var(--color-deep-moss)" : "#dc2626" }}>
-                {totalPnl >= 0 ? "+" : ""}¥{totalPnl.toLocaleString()}
-              </div>
-              <div className="stat-sub" style={{ color: totalPnlPct >= 0 ? "var(--color-deep-moss)" : "#dc2626" }}>
-                {totalPnlPct >= 0 ? "+" : ""}{totalPnlPct.toFixed(1)}%
-              </div>
-            </div>
-            <span className="semantic-icon">{totalPnl >= 0 ? <TrendingUp size={18} /> : <TrendingDown size={18} />}</span>
-          </div>
-        </div>
-        <div className="card">
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
-            <div>
-              <div className="stat-label">勝率</div>
-              <div className="stat-value stat-value-sm" style={{ color: "var(--color-muted-clay)" }}>--</div>
-              <div className="stat-sub">取引データ不足</div>
-            </div>
-            <ScoreRing value={0} label="準備中" />
-          </div>
-        </div>
-      </div>
-
-      <div className="card ops-checklist" style={{ marginBottom: 14 }}>
-        {[
-          { title: "安全装置", copy: ks.allowed ? "新規判断を続行できます" : ks.reason ?? "ブロック中です", state: ks.allowed ? "正常" : "停止" },
-          { title: "評価損益", copy: `${totalPnl >= 0 ? "+" : ""}¥${totalPnl.toLocaleString()} / ${totalPnlPct >= 0 ? "+" : ""}${totalPnlPct.toFixed(1)}%`, state: totalPnl >= 0 ? "プラス" : "マイナス" },
-          { title: "次の確認", copy: showPositions ? "保有銘柄をレビューへ送れます" : "更新後に一覧を確認します", state: showPositions ? "準備済み" : "待機" },
-        ].map((item) => (
-          <div key={item.title} className="ops-check-item">
-            <div>
-              <div className="stat-label">{item.title}</div>
-              <div className="ops-check-copy">{item.copy}</div>
-            </div>
-            <span className="badge badge-outline">{item.state}</span>
-          </div>
-        ))}
-      </div>
-
-      {/* Positions list */}
-      {showPositions && (
-        <div className="card" style={{ marginBottom: 14 }}>
-          <div className="stat-label">ポジション一覧</div>
-          <div className="position-list">
-            {positions.map((p, i) => {
-              const pnl = (p.current - p.entry) * p.qty;
-              const pnlPct = ((p.current - p.entry) / p.entry * 100).toFixed(1);
-              return <PositionRow key={i} sym={p.sym} pnl={pnl} pnlPct={Number(pnlPct)} status="open" />;
-            })}
-          </div>
+      ) : (
+        <div className="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>銘柄</th>
+                <th>エントリー価格</th>
+                <th>現在価格</th>
+                <th>数量</th>
+                <th>損益</th>
+                <th>損益率</th>
+                <th>ステータス</th>
+              </tr>
+            </thead>
+            <tbody>
+              {positions.map((p, i) => {
+                const pnl = (p.current - p.entry) * p.qty;
+                const pnlPct = ((p.current - p.entry) / p.entry * 100).toFixed(1);
+                const isWin = pnl >= 0;
+                return (
+                  <tr key={i}>
+                    <td style={{ fontWeight: 500 }}>{p.sym}</td>
+                    <td style={{ fontFamily: "var(--font-mono)" }}>¥{p.entry.toLocaleString()}</td>
+                    <td style={{ fontFamily: "var(--font-mono)" }}>¥{p.current.toLocaleString()}</td>
+                    <td style={{ fontFamily: "var(--font-mono)" }}>{p.qty}</td>
+                    <td style={{ fontFamily: "var(--font-mono)", color: isWin ? "var(--success)" : "var(--danger)" }}>
+                      {isWin ? "+" : ""}¥{pnl.toLocaleString()}
+                    </td>
+                    <td style={{ fontFamily: "var(--font-mono)", color: isWin ? "var(--success)" : "var(--danger)" }}>
+                      {isWin ? "+" : ""}{pnlPct}%
+                    </td>
+                    <td><span className="badge badge-neutral">open</span></td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
         </div>
       )}
-
-      {!showPositions && (
-        <div className="card card-dashed empty-state">
-          <div className="empty-state-media">
-            <Image
-              src="https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?w=440&q=80&fit=crop"
-              alt=""
-              fill
-              sizes="220px"
-            />
-          </div>
-          <div className="empty-state-title">「更新」を押してデータを読み込んでください</div>
-          <div className="empty-state-copy">スキャン実行後にポジションデータが表示されます。評価損益と安全装置をここで確認します。</div>
-        </div>
-      )}
-    </div>
+    </>
   );
 }

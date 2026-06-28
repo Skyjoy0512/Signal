@@ -10,9 +10,15 @@ const PUBLIC_PATH_PREFIXES = [
   "/api/auth/logout",
   "/api/auth/google",
   "/api/auth/callback",
+  "/api/auth/signin",
+  "/api/auth/signup",
+  "/api/auth/magiclink",
+  "/api/auth/github",
+  "/api/auth/twitter",
   "/favicon.ico",
   "/images",
   "/login",
+  "/signup",
   "/robots.txt",
   "/sitemap.xml",
 ];
@@ -32,6 +38,9 @@ export async function proxy(request: NextRequest) {
   }
 
   const { pathname } = request.nextUrl;
+  if (pathname === "/") {
+    return NextResponse.next();
+  }
   if (PUBLIC_PATH_PREFIXES.some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`))) {
     return NextResponse.next();
   }
@@ -102,7 +111,7 @@ async function allowSupabaseSession(request: NextRequest): Promise<NextResponse 
 
 function forbidden(request: NextRequest) {
   if (request.nextUrl.pathname.startsWith("/api/")) {
-    return NextResponse.json({ error: "forbidden", message: "This Google account is not allowed" }, { status: 403 });
+    return NextResponse.json({ error: "forbidden", message: "This account is not allowed" }, { status: 403 });
   }
   const url = request.nextUrl.clone();
   url.pathname = "/login";

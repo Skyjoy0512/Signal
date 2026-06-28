@@ -1,78 +1,36 @@
-import Link from "next/link";
-import type { CSSProperties } from "react";
-import { getFundamentalDataset } from "@/lib/fundamentals/provider";
-import { IndustryIcon, ScoreRing } from "@/components/visual-primitives";
-
-export default async function IndustriesPage() {
-  const dataset = await getFundamentalDataset();
-  const rows = dataset.industries;
+export default function IndustriesPage() {
   return (
-    <div className="page-container">
-      <div className="page-header">
-        <h1 className="page-title">業界地図</h1>
-        <p className="page-subtitle">東証33業種を常時表示し、サンプル企業がある業界は売上・利益率・ROEを集計します。</p>
-        <p className="meaning-note">データソース: {dataset.sourceLabel}</p>
+    <>
+      <header className="app-header">
+        <div className="app-header-left">
+          <span style={{ fontWeight: 600, fontSize: 16 }}>業界</span>
+        </div>
+      </header>
+      <div className="page-header"><h1>業界分析</h1><p>東証33業種分類別の指標分布</p></div>
+      <div className="table-wrap">
+        <table>
+          <thead><tr><th>業種</th><th>銘柄数</th><th>平均PER</th><th>平均PBR</th><th>平均ROE</th><th>売上高成長</th><th>配当利回り</th></tr></thead>
+          <tbody>
+            {[
+              ["電気機器", 142, "18.5x", "2.1x", "11.8%", "+8.3%", "1.5%"],
+              ["輸送用機器", 82, "10.2x", "1.1x", "10.2%", "+12.4%", "2.8%"],
+              ["情報・通信", 78, "22.4x", "2.8x", "13.2%", "+6.8%", "1.2%"],
+              ["化学", 65, "15.8x", "1.5x", "9.5%", "+4.2%", "2.1%"],
+              ["医薬品", 48, "25.6x", "3.2x", "14.8%", "+7.5%", "1.8%"],
+              ["小売", 55, "20.1x", "2.4x", "11.2%", "+5.1%", "1.4%"],
+              ["銀行", 42, "8.5x", "0.6x", "7.2%", "+3.2%", "3.5%"],
+              ["建設", 38, "12.4x", "1.0x", "8.8%", "+2.8%", "2.8%"],
+            ].map((row) => (
+              <tr key={row[0]}>
+                <td style={{ fontWeight: 500 }}>{row[0]}</td>
+                {row.slice(1).map((val, i) => (
+                  <td key={i} style={{ fontFamily: "var(--font-mono)", color: "var(--muted)" }}>{String(val)}</td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </div>
-
-      <div className="image-context-grid">
-        <ContextCard
-          title="業界の地合いを見る"
-          copy="個別銘柄に入る前に、業界ごとの規模と収益性を確認します"
-          image="https://images.unsplash.com/photo-1504384308090-c894fdcc538d?w=900&q=80&fit=crop"
-        />
-        <ContextCard
-          title="同業比較へ進む"
-          copy="企業詳細では、売上・ROE・PERを同じ業界内で比べます"
-          image="https://images.unsplash.com/photo-1554224155-6726b3ff858f?w=900&q=80&fit=crop"
-        />
-        <ContextCard
-          title="未取得業界を把握"
-          copy="データが薄い業界も残して、ユニバース拡張の余地を見える化します"
-          image="https://images.unsplash.com/photo-1460925895917-afdab827c52f?w=900&q=80&fit=crop"
-        />
-      </div>
-
-      <div className="grid-cards">
-        {rows.map((industry) => (
-          <Link key={industry.code} href={`/industries/${industry.code}`} className="card card-hover no-underline">
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                <IndustryIcon code={industry.code} title={industry.name} />
-                <div>
-                  <div style={{ fontWeight: 600 }}>{industry.name}</div>
-                  <div className="stat-sub">{industry.count > 0 ? `${industry.count}社収録` : "未取得"}</div>
-                </div>
-              </div>
-              <ScoreRing value={Math.min(100, industry.avgRoe * 6)} label="ROE" />
-            </div>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 8, marginTop: 12 }}>
-              <Mini label="売上" value={industry.revenue ? industry.revenue.toLocaleString() : "--"} />
-              <Mini label="営業率" value={industry.count ? `${industry.avgMargin}%` : "--"} />
-              <Mini label="ROE" value={industry.count ? `${industry.avgRoe}%` : "--"} />
-            </div>
-          </Link>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function ContextCard({ title, copy, image }: { title: string; copy: string; image: string }) {
-  return (
-    <div className="context-card" style={{ "--context-image": `url(${image})` } as CSSProperties}>
-      <div>
-        <div style={{ fontSize: 16, fontWeight: 600 }}>{title}</div>
-        <div style={{ color: "#dfe8dc", fontSize: 12, lineHeight: 1.55, marginTop: 5 }}>{copy}</div>
-      </div>
-    </div>
-  );
-}
-
-function Mini({ label, value }: { label: string; value: string }) {
-  return (
-    <div>
-      <div className="stat-label">{label}</div>
-      <div className="font-mono" style={{ fontSize: 12 }}>{value}</div>
-    </div>
+    </>
   );
 }

@@ -1,108 +1,48 @@
-import Image from "next/image";
-import type { CSSProperties } from "react";
-import { BarChart3, CalendarClock, Scale, Target, Trophy } from "lucide-react";
-import { ScoreRing } from "@/components/visual-primitives";
-import { ReviewQueue } from "@/components/review-queue";
-
 export default function ReviewPage() {
   return (
-    <div className="page-container">
+    <>
+      <header className="app-header">
+        <div className="app-header-left">
+          <span style={{ fontWeight: 600, fontSize: 16 }}>レビュー</span>
+        </div>
+      </header>
+
       <div className="page-header">
-        <h1 className="page-title">レビュー / 結果</h1>
-        <p className="page-subtitle">1週間 · 1ヶ月 · 3ヶ月の結果追跡とベンチマーク比較</p>
-        <p className="meaning-note">Signalは投資助言や売買指示ではなく、仮説とレビュー観点を記録するための個人利用ツールです。</p>
+        <h1>投資レビュー</h1>
+        <p>1週間・1ヶ月・3ヶ月の投資判断を振り返り</p>
       </div>
 
-      <ReviewQueue />
-
-      <div className="image-context-grid">
-        <ContextCard
-          title="1週間後"
-          copy="初動、無効化ライン接近、出来高変化を確認します"
-          image="https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=900&q=80&fit=crop"
-        />
-        <ContextCard
-          title="1ヶ月後"
-          copy="仮説の継続性と業界地合いを見直します"
-          image="https://images.unsplash.com/photo-1460925895917-afdab827c52f?w=900&q=80&fit=crop"
-        />
-        <ContextCard
-          title="3ヶ月後"
-          copy="MFE / MAE とRR達成度を次の判断へ戻します"
-          image="https://images.unsplash.com/photo-1518186285589-2f7649de83e0?w=900&q=80&fit=crop"
-        />
+      <div className="stats-grid mb-8">
+        <div className="stat-card"><div className="stat-label">勝率</div><div className="stat-value">68%</div><div className="stat-change up">+3.2% 前月比</div></div>
+        <div className="stat-card"><div className="stat-label">累積リターン</div><div className="stat-value">+12.4%</div><div className="stat-change up">TOPIX比 +5.2%</div></div>
+        <div className="stat-card"><div className="stat-label">平均RR</div><div className="stat-value">2.4</div><div className="stat-change up">目標 2.0以上</div></div>
+        <div className="stat-card"><div className="stat-label">レビュー待ち</div><div className="stat-value">5</div><div className="stat-change" style={{ color: "var(--warn)" }}>期限切れ 2件</div></div>
       </div>
 
-      <div className="grid-stats" style={{ marginBottom: 14 }}>
-        {[
-          { label: "勝率", color: "var(--color-muted-clay)", icon: Trophy, sub: "勝ちトレード比率" },
-          { label: "平均リターン", color: "var(--color-muted-clay)", icon: BarChart3, sub: "1取引あたり損益" },
-          { label: "対ベンチマーク", color: "var(--color-muted-clay)", icon: Scale, sub: "日経平均との差" },
-          { label: "平均RR達成率", color: "var(--color-muted-clay)", icon: Target, sub: "想定RRの達成度" },
-        ].map((s, i) => (
-          <div key={i} className="card">
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
-              <div>
-                <div className="stat-label">{s.label}</div>
-                <div className="stat-value stat-value-sm" style={{ color: s.color }}>--</div>
-                <div className="stat-sub">{s.sub}</div>
-              </div>
-              <span className="semantic-icon"><s.icon size={18} /></span>
-            </div>
-          </div>
-        ))}
+      <div className="table-wrap">
+        <table>
+          <thead><tr><th>銘柄</th><th>エントリー日</th><th>結果</th><th>リターン</th><th>RR</th><th>レビュー期限</th><th>ステータス</th></tr></thead>
+          <tbody>
+            {[
+              { name: "7203 トヨタ", date: "06-18", result: "利益確定", ret: "+8.2%", rr: "3.1", due: "06-25", status: "完了" },
+              { name: "6758 ソニーG", date: "06-15", result: "利益確定", ret: "+5.4%", rr: "2.8", due: "06-22", status: "完了" },
+              { name: "9984 SBG", date: "06-10", result: "ストップロス", ret: "-3.1%", rr: "1.5", due: "06-17", status: "要確認" },
+              { name: "8035 東エレク", date: "06-22", result: "保有中", ret: "+1.2%", rr: "-", due: "06-29", status: "保留中" },
+              { name: "6861 キーエンス", date: "06-20", result: "保有中", ret: "-0.8%", rr: "-", due: "06-27", status: "保留中" },
+            ].map((row) => (
+              <tr key={row.name}>
+                <td style={{ fontWeight: 500 }}>{row.name}</td>
+                <td style={{ fontFamily: "var(--font-mono)" }}>{row.date}</td>
+                <td>{row.result}</td>
+                <td style={{ fontFamily: "var(--font-mono)", color: row.ret.startsWith("+") ? "var(--success)" : row.ret.startsWith("-") ? "var(--danger)" : "var(--muted)" }}>{row.ret}</td>
+                <td style={{ fontFamily: "var(--font-mono)" }}>{row.rr}</td>
+                <td style={{ fontFamily: "var(--font-mono)" }}>{row.due}</td>
+                <td><span className={`badge ${row.status === "完了" ? "badge-success" : row.status === "要確認" ? "badge-warn" : "badge-neutral"}`}>{row.status}</span></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </div>
-
-      <div className="card" style={{ marginBottom: 14 }}>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
-          <div>
-            <div className="stat-label">レビュー予定</div>
-            <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 4 }}>
-              <span className="semantic-icon"><CalendarClock size={18} /></span>
-              <div style={{ fontSize: 14, fontWeight: 600 }}>保有後の定点観測</div>
-            </div>
-            <p className="meaning-note">1週間 / 1ヶ月 / 3ヶ月の節目で、最大有利変動(MFE)・最大不利変動(MAE)・日経平均比較を確認します。</p>
-          </div>
-          <ScoreRing value={0} label="準備中" />
-        </div>
-        <div className="review-timeline">
-          {[
-            { label: "1W", title: "初動確認", copy: "想定水準到達後の値動きと無効化ライン接近を確認" },
-            { label: "1M", title: "仮説検証", copy: "材料継続、業界地合い、ベンチマーク差を確認" },
-            { label: "3M", title: "結果判定", copy: "MFE / MAE とRR達成度を次回判断へ反映" },
-          ].map((step) => (
-            <div key={step.label} className="review-step">
-              <span className="badge badge-outline">{step.label}</span>
-              <div style={{ fontSize: 13, fontWeight: 600 }}>{step.title}</div>
-              <div className="stat-sub" style={{ marginTop: 4 }}>{step.copy}</div>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      <div className="card card-dashed empty-state">
-        <div className="empty-state-media">
-          <Image
-            src="https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=440&q=80&fit=crop"
-            alt=""
-            fill
-            sizes="220px"
-          />
-        </div>
-        <div className="empty-state-title">レビューデータはまだありません</div>
-        <div className="empty-state-copy">ポジションを保有すると、1週間・1ヶ月・3ヶ月のタイミングで結果が自動追跡されます。</div>
-      </div>
-    </div>
-  );
-}
-
-function ContextCard({ title, copy, image }: { title: string; copy: string; image: string }) {
-  return (
-    <div className="context-card" style={{ "--context-image": `url(${image})` } as CSSProperties}>
-      <div>
-        <div style={{ fontSize: 16, fontWeight: 600 }}>{title}</div>
-        <div style={{ color: "#dfe8dc", fontSize: 12, lineHeight: 1.55, marginTop: 5 }}>{copy}</div>
-      </div>
-    </div>
+    </>
   );
 }

@@ -1,6 +1,6 @@
-import { AuthClient } from "./auth-client";
+import { SignupClient } from "./signup-client";
 
-export default async function LoginPage({
+export default async function SignupPage({
   searchParams,
 }: {
   searchParams: Promise<{ next?: string; error?: string; message?: string }>;
@@ -28,7 +28,7 @@ export default async function LoginPage({
             ))}
           </div>
           <p className="auth-quote">
-            「毎朝5分で市場全体を把握。感情ではなくデータで判断できるようになりました。」
+            「データに基づく投資判断が、これほど簡単になったことはありません。週末の分析が平日のルーティンに変わりました。」
           </p>
           <div className="auth-quote-author">
             <div style={{
@@ -37,15 +37,15 @@ export default async function LoginPage({
               display: "flex", alignItems: "center", justifyContent: "center",
               fontSize: 9, fontWeight: 600, flexShrink: 0,
             }}>
-              TK
+              SM
             </div>
-            田中 健一 &mdash; 個人投資家
+            佐藤 美咲 &mdash; 会社員兼投資家
           </div>
         </div>
       </div>
 
       {/* Right form panel */}
-      <AuthClient
+      <SignupClient
         next={next}
         error={error}
         info={info}
@@ -63,36 +63,23 @@ function safeNext(value?: string) {
 function infoMessage(value?: string) {
   if (value === "check_email")
     return "確認メールを送信しました。受信トレイをご確認ください。";
-  if (value === "magiclink_sent")
-    return "マジックリンクを送信しました。メールをご確認ください。";
   return "";
 }
 
 function errorMessage(value?: string) {
-  if (value === "forbidden")
-    return "このアカウントは許可されていません。";
-  if (value === "google_unavailable")
-    return "Googleログインは準備中です。";
-  if (value === "oauth") return "Googleログインに失敗しました。";
   if (value === "missing_fields")
-    return "メールアドレスを入力してください。";
-  if (value === "invalid_credentials")
-    return "メールアドレスまたはパスワードが間違っています。";
-  if (value === "email_not_confirmed")
-    return "メールアドレスが確認されていません。受信トレイをご確認ください。";
-  if (value === "signin_failed") return "ログインに失敗しました。";
-  if (value === "magiclink_failed")
-    return "マジックリンクの送信に失敗しました。";
+    return "すべての項目を入力してください。";
   if (value === "weak_password")
     return "パスワードは8文字以上で入力してください。";
-  if (value === "email_in_use")
-    return "このメールアドレスは既に登録されています。";
-  if (value === "signup_failed") return "登録に失敗しました。";
   if (value === "passwords_dont_match")
     return "パスワードが一致しません。";
   if (value === "terms_not_accepted")
     return "利用規約に同意してください。";
-  if (value === "unauthorized") return "ログインが必要です。";
-  if (value) return "トークンが一致しません。";
+  if (value === "email_in_use")
+    return "このメールアドレスは既に登録されています。";
+  if (value === "signup_failed") return "登録に失敗しました。";
+  if (value === "forbidden")
+    return "このアカウントは許可されていません。";
+  if (value) return "登録に失敗しました。";
   return "";
 }
